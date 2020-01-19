@@ -7,7 +7,7 @@ extern crate rand;
 use crate::rand::Rng;
 use piston::PressEvent;
 
-use graphics::math::{Vec2d, Matrix2d};
+use graphics::math::{Vec2d, Matrix2d, sub, square_len};
 use glutin_window::GlutinWindow as Window;
 use opengl_graphics::{GlGraphics, OpenGL};
 use piston::event_loop::{EventSettings, Events};
@@ -21,11 +21,14 @@ pub struct World {
 }
 
 pub struct App {
-    gl: GlGraphics, // OpenGL drawing backend.
-    rotation: f64,  // Rotation for the square.
-    renderables: Vec<Rect>,
-    cam_transform : Vec2d<f64>,
-    world: World
+    gl           : GlGraphics,   // OpenGL drawing backend.
+    rotation     : f64,          // Rotation for the square.
+    background   : Vec<Rect>,
+    foreground   : Vec<Rect>,
+    cam_transform: Vec2d<f64>,
+    world        : World,
+    player       : Option<Rect>,
+    dead         : bool
 }
 
 pub struct Rect {
@@ -57,29 +60,45 @@ impl Rect {
                     .scale(self.scale, self.scale);
         
         rectangle(self.color, shape, transform , gl);        
-
         // line(self.color, 1.0, shape, transform, gl);
     }
 }
 
 impl App {
+    pub const fn new(gl : GlGraphics) -> App {
+        App{
+            gl:gl,
+            rotation: 0.0,
+            background: Vec::<Rect>::new(),
+            foreground: Vec::<Rect>::new(),
+            cam_transform: [0.0, 0.0],
+            world: World{ size: [3000.0, 640.0]},
+            player: None,
+            dead: false
+        }
+    }
+
+
     fn render(&mut self, args: &RenderArgs) {
         use graphics::*;
 
-        const GREEN : [f32; 4] = [0.0, 1.0, 0.0, 1.0];
-        const RED   : [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+        // const GREEN : [f32; 4] = [0.0, 1.0, 0.0, 1.0];
+        const GREY  : [f32; 4] = [0.1; 4];
+        // const RED   : [f32; 4] = [1.0, 0.0, 0.0, 1.0];
 
-        let square   = rectangle::square(0.0, 0.0, 50.0);
+        // let square   = rectangle::square(0.0, 0.0, 50.0);
         let rotation = self.rotation;
         let (x, y)   = (args.window_size[0] / 2.0, args.window_size[1] / 2.0);
 
         let tr = self.cam_transform;
-        let rs = &mut self.renderables;
+        let bg_rects = &mut self.background;
+        let fg_rects = &mut self.foreground;
+        let player_r = &mut self.player;
 
         self.gl.draw(args.viewport(), |c, gl| {
             // Clear the screen.
             // clear(GREEN, gl);
-            clear(GREEN, gl);
+            clear(GREY, gl);
 
             let world_transform = c
                 .transform
@@ -87,9 +106,17 @@ impl App {
             
             let camera_transform = c.transform;
 
-            for r in rs {
+            for r in bg_rects {
                 r.render(gl, world_transform);
             }
+            for r in fg_rects {
+                r.render(gl, world_transform);
+            }
+            if let Some(r) = player_r.as_mut(){
+                r.render(gl, world_transform);
+            }              
+            
+
 
             let transform = camera_transform
                 .trans(x, y)
@@ -97,37 +124,80 @@ impl App {
                 .trans(-25.0, -25.0);
 
             // Draw a box rotating around the middle of the screen.
-            rectangle(RED, square, transform, gl);
+            // rectangle(RED, square, transform, gl);
         });
     }
 
-    fn update(&mut self, args: &UpdateArgs) {
+    fn update(&mut self, _args: &UpdateArgs) {
         // Rotate 2 radians per second.
-        self.rotation += 2.0 * args.dt;
+        // self.rotation += 2.0 * args.dt;
         self.cam_transform[0] -= 1.0;
+        //
+        if let Some(r2) = self.player.as_mut(){
+            r2._move( &[1.0, 0.0]);
+
+            for r in &mut self.foreground {
+                let square_dist =(r.size[0]+r2.size[0]) * (r.size[0]+r2.size[0]);
+                if square_len(sub(r.translation, r2.translation)) < square_dist{
+                    r.color = [1.0, 0.0, 0.0, 1.0];
+                    self.dead = true;
+                }            
+            }
+        }              
+
     }
 
 
-    fn add_rect(&mut self){
-        const MAX_X    : f64 = 1640.0;
-        const MAX_Y    : f64 = 480.0;
+    fn add_background_rect(&mut self){        
         const MAX_SIZE : f64 = 50.0;
         let mut rng = rand::thread_rng();
-        let x    = rng.gen_range(0.0, MAX_X);
-        let y    = rng.gen_range(0.0, MAX_Y);
+        let x    = rng.gen_range(0.0, self.world.size[0]);
+        let y    = rng.gen_range(0.0, self.world.size[1]);
         let size = rng.gen_range(0.0, MAX_SIZE);
-        let r    = rng.gen_range(0.0, 1.0);
+        let r    = rng.gen_range(0.1, 0.5);
         
         let r = Rect { 
             rotation   : 0.0,
             translation: [x, y],
             scale      : 1.0,
-            color      : [r, 1.0, 0.0, 1.0],
+            color      : [r, r, r, 1.0],
             size       : [size, size]
          };
-    
-        self.renderables.push(r);
+            
+        self.background.push(r);    
     }
+
+    fn add_foreground_rect(&mut self){        
+        const MAX_SIZE : f64 = 50.0;
+        let mut rng = rand::thread_rng();
+        let x    = rng.gen_range(0.0, self.world.size[0]);
+        let y    = rng.gen_range(0.0, self.world.size[1]);
+        let size = rng.gen_range(0.0, MAX_SIZE);
+        let b    = rng.gen_range(0.0, 1.0);
+        
+        let r = Rect { 
+            rotation   : 0.0,
+            translation: [x, y],
+            scale      : 1.0,
+            color      : [1.0, 1.0, b, 1.0],
+            size       : [size, size]
+         };
+            
+        self.foreground.push(r);    
+    }
+
+    fn add_player_rect(&mut self){
+        
+
+        self.player = Some(Rect { 
+            rotation   : 0.0,
+            translation: [10.0, self.world.size[1]/2.0],
+            scale      : 1.0,
+            color      : [1.0, 0.0, 0.0, 1.0],
+            size       : [25.0, 25.0]
+         });
+    }
+
 }
 
 fn main() {
@@ -142,17 +212,16 @@ fn main() {
         .unwrap();
 
     // Create a new game and run it.
-    let mut app = App {
-        gl: GlGraphics::new(opengl),
-        rotation: 0.0,
-        renderables: Vec::<Rect>::new(),
-        cam_transform: [0.0, 0.0],
-        world: World{ size: [3000.0, 640.0]}
-    };
+    let gl = GlGraphics::new(opengl);
+    let mut app = App::new(gl) ;
 
     for _i in 1..10000 {
-        app.add_rect();
+        app.add_background_rect();
     }
+    for _i in 1..100 {
+        app.add_foreground_rect();
+    }
+    app.add_player_rect();
 
 
     let mut events = Events::new(EventSettings::new());
@@ -170,21 +239,19 @@ fn main() {
             const RIGHT : [f64; 2] = [ 10.0,   0.0];
             const UP    : [f64; 2] = [  0.0, -10.0];
             const DOWN  : [f64; 2] = [  0.0,  10.0];
-            if key == Key::Left {
-                // app.renderables[0]._move(&LEFT);
-                app.cam_transform[0] -= LEFT[0];
-            }
-            if key == Key::Right {
-                // app.renderables[0]._move(&RIGHT);
-                app.cam_transform[0] -= RIGHT[0];
-            }
-            if key == Key::Up {
-                // app.renderables[0]._move(&UP);
-                app.cam_transform[1] -= UP[1];
-            }
-            if key == Key::Down {
-                // app.renderables[0]._move(&DOWN);
-                app.cam_transform[1] -= DOWN[1];
+            if let Some(r) = app.player.as_mut(){
+                if key == Key::Left {
+                    r._move(&LEFT);
+                }                                            
+                if key == Key::Right {                
+                    r._move(&RIGHT);
+                }                
+                if key == Key::Up {                    
+                    r._move(&UP);
+                }                            
+                if key == Key::Down {
+                    r._move(&DOWN);
+                }                              
             }            
         };
     }

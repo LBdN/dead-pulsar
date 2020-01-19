@@ -4,7 +4,7 @@ extern crate opengl_graphics;
 extern crate piston;
 use crate::piston::PressEvent;
 
-use graphics::math::{Vec2d, identity};
+use graphics::math::{Vec2d, Matrix2d, identity};
 use glutin_window::GlutinWindow as Window;
 use opengl_graphics::{GlGraphics, OpenGL};
 use piston::event_loop::{EventSettings, Events};
@@ -15,7 +15,8 @@ use piston::window::WindowSettings;
 pub struct App {
     gl: GlGraphics, // OpenGL drawing backend.
     rotation: f64,  // Rotation for the square.
-    renderables: Vec<Rect>
+    renderables: Vec<Rect>,
+    cam_transform : Vec2d<f64>
 }
 
 pub struct Rect {
@@ -28,7 +29,7 @@ pub struct Rect {
 
 impl Rect {
 
-    fn _move(&mut self, v : Vec2d){
+    fn _move(&mut self, v : &Vec2d){
         self.translation[0] += v[0];
         self.translation[1] += v[1];
     }
@@ -40,15 +41,13 @@ impl Rect {
                       0.0,
                       self.size[0],
                       self.size[1]];
-        
-        let transform = identity()
-                            .trans( self.translation[0], self.translation[1] )
-                            .rot_rad(self.rotation)
-                            .scale(self.scale, self.scale);
 
-
-        gl.draw(args.viewport(), |_c, gl| {
-            // Clear the screen.            
+        gl.draw(args.viewport(), |c, gl| {
+            let transform = c.transform
+                        .trans( self.translation[0], self.translation[1] )
+                        .rot_rad(self.rotation)
+                        .scale(self.scale, self.scale);
+            
             rectangle(self.color, shape, transform , gl);
         });
     }
@@ -65,12 +64,19 @@ impl App {
         let rotation = self.rotation;
         let (x, y) = (args.window_size[0] / 2.0, args.window_size[1] / 2.0);
 
+        let tr = self.cam_transform;
+
         self.gl.draw(args.viewport(), |c, gl| {
             // Clear the screen.
             clear(GREEN, gl);
+            
+            
+            //             self.camera_transform[0],
+            //             self.camera_transform[1]);
 
             let transform = c
                 .transform
+                .trans(tr[0], tr[1])
                 .trans(x, y)
                 .rot_rad(rotation)
                 .trans(-25.0, -25.0);
@@ -87,6 +93,7 @@ impl App {
     fn update(&mut self, args: &UpdateArgs) {
         // Rotate 2 radians per second.
         self.rotation += 2.0 * args.dt;
+        // self.cam_transform[0] += 1.0;
     }
 }
 
@@ -105,15 +112,16 @@ fn main() {
     let mut app = App {
         gl: GlGraphics::new(opengl),
         rotation: 0.0,
-        renderables: Vec::<Rect>::new()
+        renderables: Vec::<Rect>::new(),
+        cam_transform: [0.0, 0.0]
     };
 
     let r = Rect { 
-        rotation   : 0.9,
+        rotation   : 0.0,
         translation: [0.0, 0.0],
         scale      : 1.0,
         color      : [1.0, 1.0, 0.0, 1.0],
-        size       : [30.0, 3.00]
+        size       : [30.0, 30.00]
      };
 
     app.renderables.push(r);
@@ -129,13 +137,26 @@ fn main() {
         }
 
         if let Some(Button::Keyboard(key)) = e.press_args() {
+            const LEFT  : [f64; 2] = [-10.0,   0.0];
+            const RIGHT : [f64; 2] = [ 10.0,   0.0];
+            const UP    : [f64; 2] = [  0.0, -10.0];
+            const DOWN  : [f64; 2] = [  0.0,  10.0];
             if key == Key::Left {
-                app.renderables[0]._move([-10.0,-10.0]);
+                // app.renderables[0]._move(&LEFT);
+                app.cam_transform[0] += LEFT[0];
             }
             if key == Key::Right {
-                app.renderables[0]._move([10.0,10.0]);
+                // app.renderables[0]._move(&RIGHT);
+                app.cam_transform[0] += RIGHT[0];
             }
-            println!("Pressed keyboard key '{:?}'", key);
+            if key == Key::Up {
+                // app.renderables[0]._move(&UP);
+                app.cam_transform[1] += UP[1];
+            }
+            if key == Key::Down {
+                // app.renderables[0]._move(&DOWN);
+                app.cam_transform[1] += DOWN[1];
+            }            
         };
     }
 }

@@ -7,7 +7,8 @@ use rand;
 use rand::Rng;
 
 use ggez::{Context, ContextBuilder, GameResult};
-use ggez::event::{self, EventHandler};
+use ggez::event::{self, EventHandler, Axis};
+use ggez::input::gamepad::GamepadId;
 use ggez::input::keyboard::KeyCode;
 use ggez::event::KeyMods;
 use ggez::graphics;
@@ -18,17 +19,19 @@ use cgmath::{Vector2, Point2};
 use cgmath::prelude::*;
 
 const GREY : Color = Color{ r: 0.5, g:0.5, b:0.5, a:1.0};
+const RED  : Color = Color{ r: 1.0, g:0.0, b:0.0, a:1.0};
 
-pub struct RectDescriptor{    
+pub struct RectDescriptor{
     color      : Color,
     size       : mint::Point2::<f32>,
 }
-    
+
 
 pub struct Actor {
-    transform  : mint::Point2::<f32>,        
+    transform  : mint::Point2::<f32>,
     mesh_idx   : usize,
-    rect_desc  : Option::<RectDescriptor>
+    rect_desc  : Option::<RectDescriptor>,
+    dead       : bool
 }
 
 impl Actor {
@@ -36,14 +39,38 @@ impl Actor {
         Actor {
             transform: mint::Point2::<f32>{ x:0.0, y:0.0},
             mesh_idx: 0,
-            rect_desc: None
+            rect_desc: None,
+            dead : false
+        }
+    }
+}
+
+/// **********************************************************************
+/// The `InputState` is exactly what it sounds like, it just keeps track of
+/// the user's input state so that we turn keyboard events into something
+/// state-based and device-independent.
+/// **********************************************************************
+#[derive(Debug)]
+struct InputState {
+    xaxis: f32,
+    yaxis: f32,
+    fire: bool,
+}
+
+impl Default for InputState {
+    fn default() -> Self {
+        InputState {
+            xaxis: 0.0,
+            yaxis: 0.0,
+            fire: false,
         }
     }
 }
 
 pub struct Player{
     score : i32,
-    actor : Actor,    
+    actor : Actor,
+    input : InputState
 }
 
 
@@ -67,12 +94,12 @@ impl App {
     pub fn new(ctx: &mut Context) -> App {
         // Load/create resources here: images, fonts, sounds, etc.
         // let assets = find_folder::Search::ParentsThenKids(3, 3).for_folder("res").unwrap();
-        // let fp     = assets.join("FiraMono-Bold.ttf");        
+        // let fp     = assets.join("FiraMono-Bold.ttf");
         let font = graphics::Font::new(ctx, "/FiraMono-Bold.ttf").unwrap();
         let text = graphics::Text::new(("Pulsar 3", font, 28.0));
 
 
-        App { 
+        App {
             font   : font,
             text   : text,
             actors : Vec::<Actor>::new(),
@@ -86,7 +113,7 @@ impl App {
     fn add_player(&mut self) {
         let size = 10;
         let mut a = Actor::default();
-        a.rect_desc = Some( RectDescriptor {                             
+        a.rect_desc = Some( RectDescriptor {
             color   : Color{r:0.1, g:0.0, b:1.0, a:1.0},
             size    : mint::Point2::<f32>{ x:size as f32, y:size as f32},
         } );
@@ -96,6 +123,7 @@ impl App {
         self.player = Some( Player{
             score: 0,
             actor: a,
+            input: InputState::default()
         })
     }
 
@@ -114,8 +142,8 @@ impl App {
 
             a.transform = mint::Point2::<f32>{ x:x as f32, y:y as f32};
 
-            a.rect_desc = Some( RectDescriptor {                 
-                           
+            a.rect_desc = Some( RectDescriptor {
+
                 color   : Color{r:r, g:r, b:b, a:1.0},
                 size    : mint::Point2::<f32>{ x:size as f32, y:size as f32},
             } );
@@ -124,7 +152,20 @@ impl App {
         }
     }
 
-    fn add_background_rects(&mut self, ctx : &mut Context){        
+    fn add_end_rects(&mut self, _ctx : &mut Context){
+        let mut a = Actor::default();
+        a.transform = mint::Point2::<f32>{ x:self.world.size[0] as f32, y:0 as f32};
+
+        a.rect_desc = Some( RectDescriptor {
+
+            color   : RED,
+            size    : mint::Point2::<f32>{ x:50 as f32, y:self.world.size[1] as f32},
+        } );
+
+        self.actors.push(a);
+    }
+
+    fn add_background_rects(&mut self, ctx : &mut Context){
         const MAX_SIZE : f64 = 50.0;
         let mut mb = graphics::MeshBuilder::new();
 
@@ -137,19 +178,31 @@ impl App {
             let size = rng.gen_range(0.0, MAX_SIZE);
             let r    = rng.gen_range(0.1, 0.5);
 
-            mb.rectangle(            
+            mb.rectangle(
                 DrawMode::fill(),
                 Rect {x:x as f32, y:y as f32, w:size as f32, h:size as f32},
                 Color{r:r, g:r, b:r, a:1.0}
             );
-                            
+
         }
-        
+
         let mesh = mb.build(ctx).unwrap();
-        self.meshes.push(mesh);    
+        self.meshes.push(mesh);
         a.mesh_idx = self.meshes.len();
         self.actors.push(a);
     }
+}
+
+fn player_handle_input(p: &mut Player) {
+
+    const MOVE_STEP : f32 = -10.0;    
+    
+    let mut movex = p.input.xaxis * -MOVE_STEP;
+    let mut movey = p.input.yaxis * MOVE_STEP;
+        
+    p.actor.transform.x += movex;
+    p.actor.transform.y += movey;
+    
 }
 
 impl EventHandler for App {
@@ -157,25 +210,33 @@ impl EventHandler for App {
         // Update code here...
         self.cam_transform[0] -= 1.0;
 
-        if let Some(pa) = self.player.as_mut(){       
-              
-            let r2 = pa.actor.rect_desc.as_ref().unwrap();
+        if let Some(pa) = self.player.as_mut(){
+
+            // default moving forward.
             pa.actor.transform.x += 1.0;
 
+            //processing input
+            player_handle_input(pa);
+            
+            let r2 = pa.actor.rect_desc.as_ref().unwrap();
             for a in &mut self.actors {
+                if a.dead {
+                    continue;
+                }
                 if let Some(r) = a.rect_desc.as_mut() {
                     let square_dist =(r.size.x+r2.size.x) * (r.size.x+r2.size.x) * 0.25;
-                    let v1 = Point2::<f32>{x : a.transform.x ,y : a.transform.y };
-                    let v2 = Point2::<f32>{x : pa.actor.transform.x ,y : pa.actor.transform.y };
+                    let v1 = Point2::<f32>{x : a.transform.x + r.size.x/2.0,y : a.transform.y + r.size.y/2.0};
+                    let v2 = Point2::<f32>{x : pa.actor.transform.x + r2.size.x/2.0,y : pa.actor.transform.y + r2.size.y/2.0};
                     if (v1 - v2).magnitude2() < square_dist{
-                        r.color = Color{r:1.0, g:0.0, b:0.0, a:1.0};       
-                        pa.score += 1;                 
-                    }      
-                }      
+                        r.color = RED;
+                        pa.score += 1;
+                        a.dead = true;
+                    }
+                }
             }
-            
-        }   
-        
+
+        }
+
         println!("FPS: {}", ggez::timer::fps(_ctx));
         Ok(())
     }
@@ -188,37 +249,37 @@ impl EventHandler for App {
         graphics::push_transform(ctx, Some(transform));
         graphics::apply_transformations(ctx).unwrap();
 
-        // Draw code here... 
-        let mut mb = graphics::MeshBuilder::new();       
-        for a in &self.actors {     
+        // Draw code here...
+        let mut mb = graphics::MeshBuilder::new();
+        for a in &self.actors {
             if a.mesh_idx !=0 {
                 self.meshes[a.mesh_idx-1].draw(ctx, DrawParam::default().dest(a.transform)).unwrap();
             } else{
                 let rect = &a.rect_desc.as_ref().unwrap();
-                mb.rectangle(            
+                mb.rectangle(
                     DrawMode::fill(),
-                    Rect { 
-                        x:a.transform.x, 
-                        y:a.transform.y, 
-                        w:rect.size.x, 
+                    Rect {
+                        x:a.transform.x,
+                        y:a.transform.y,
+                        w:rect.size.x,
                         h:rect.size.y
                     },
                     rect.color,
                 );
-                       
-            }                           
-        }        
-        
+
+            }
+        }
+
 
         // draw player
         if let Some(player) = &self.player {
             let rect = &player.actor.rect_desc.as_ref().unwrap();
-            mb.rectangle(            
+            mb.rectangle(
                 DrawMode::fill(),
-                Rect { 
-                    x:player.actor.transform.x, 
-                    y:player.actor.transform.y, 
-                    w:rect.size.x, 
+                Rect {
+                    x:player.actor.transform.x,
+                    y:player.actor.transform.y,
+                    w:rect.size.x,
                     h:rect.size.y
                 },
                 rect.color,
@@ -236,7 +297,7 @@ impl EventHandler for App {
         graphics::draw(ctx, &self.text, DrawParam::default().dest(dest_point).color(graphics::WHITE))?;
 
         let text = graphics::Text::new( (format!("Score {}", self.player.as_ref().unwrap().score) , self.font, 28.0));
-        dest_point.x += (self.text.width(ctx) as f32) + 10.0;        
+        dest_point.x += (self.text.width(ctx) as f32) + 10.0;
         graphics::draw(ctx, &text, DrawParam::default().dest(dest_point).color(graphics::WHITE))?;
         graphics::present(ctx)
     }
@@ -245,35 +306,50 @@ impl EventHandler for App {
     fn key_down_event(&mut self, ctx: &mut Context, keycode: KeyCode, _keymod: KeyMods,  _repeat: bool) {
         if let Some(p) = self.player.as_mut(){
 
-            let mut movex = 0.0;
-            let mut movey = 0.0;
-            match keycode {                
-                KeyCode::Right => {                    
-                    movex = 10.0;
-                }
-                KeyCode::Left => {
-                    movex = -10.0;
-                }
+            match keycode {
                 KeyCode::Up => {
-                    movey = -10.0
+                    p.input.yaxis = 1.0;
                 }
                 KeyCode::Down => {
-                    movey = 10.0
+                    p.input.yaxis = -1.0;
+                }
+                KeyCode::Left => {
+                    p.input.xaxis = -1.0;
+                }
+                KeyCode::Right => {
+                    p.input.xaxis = 1.0;
                 }
                 KeyCode::Space => {
-                    
+                    p.input.fire = true;
                 }
-                _ => {}
+                KeyCode::P => {
+                    let img = graphics::screenshot(ctx).expect("Could not take screenshot");
+                    img.encode(ctx, graphics::ImageFormat::Png, "/screenshot.png")
+                        .expect("Could not save screenshot");
+                }
+                KeyCode::Escape => event::quit(ctx),
+                _ => (), // Do nothing
             }
-            
-            p.actor.transform.x += movex;
-            p.actor.transform.y += movey;
-            
+        }
+    }
+
+    fn gamepad_axis_event(&mut self, _ctx: &mut Context, axis: Axis, _value: f32, _id: GamepadId ) {
+        
+        if let Some(p) = self.player.as_mut(){            
+            if axis == Axis::LeftStickX {
+                p.input.xaxis = _value;
+            }
+            if axis == Axis::LeftStickY {
+                p.input.yaxis = _value;                
+            }
 
         }
     }
 
 }
+
+
+
 
 fn main() {
     // We add the CARGO_MANIFEST_DIR/resources to the resource paths
@@ -293,17 +369,18 @@ fn main() {
            .build()
            .unwrap();
 
-    
+
 
     // Create an instance of your event handler.
     // Usually, you should provide it with the Context object
     // so it can load resources like images during setup.
     let mut app = App::new(&mut ctx);
-    
+
     app.add_background_rects(& mut ctx);
     app.add_foreground_rects(& mut ctx);
+    app.add_end_rects(& mut ctx);
     app.add_player();
-    
+
 
 
     // Run!

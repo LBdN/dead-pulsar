@@ -15,32 +15,122 @@ use ggez::graphics;
 use ggez::conf;
 use ggez::graphics::{DrawParam, Color, Rect, Drawable, DrawMode, Mesh};
 
-use cgmath::{Vector2, Point2};
+use cgmath::{Point2};
 use cgmath::prelude::*;
+
+type Position = mint::Point2::<f32>;
+type Size     = mint::Point2::<f32>;
 
 const GREY : Color = Color{ r: 0.5, g:0.5, b:0.5, a:1.0};
 const RED  : Color = Color{ r: 1.0, g:0.0, b:0.0, a:1.0};
 
-pub struct RectDescriptor{
-    color      : Color,
-    size       : mint::Point2::<f32>,
+
+enum RectDraw{
+    StaticRect(usize),
+    DynamicRect{ color : Color, size : mint::Point2::<f32>}
 }
 
+impl RectDraw {
+    fn draw(&self, transform : Position, mb : &mut graphics::MeshBuilder, meshes : &mut Vec::<Mesh>, ctx : &mut Context){
+        match self {
+            RectDraw::StaticRect(idx) => {
+                meshes[*idx].draw(ctx, DrawParam::default().dest(transform));    
+            },
+            RectDraw::DynamicRect{color, size} => {
+                mb.rectangle(
+                    DrawMode::fill(),
+                    Rect {
+                        x:transform.x,
+                        y:transform.y,
+                        w:size.x,
+                        h:size.y
+                    },
+                    *color,
+                );
+            },
+            _ => ()
+        } 
+    }
+}
+
+// impl RectDescriptor{
+//     pub fn dynamic_draw(&self, mb : &mut graphics::MeshBuilder, transform: mint::Point2::<f32>){
+//         mb.rectangle(
+//             DrawMode::fill(),
+//             Rect {
+//                 x:transform.x,
+//                 y:transform.y,
+//                 w:self.size.x,
+//                 h:self.size.y
+//             },
+//             self.color,
+//         );   
+//     }
+// }
+
+#[derive(Debug, Copy, Clone)]
+enum Collision{
+    RectCollision{ width : f32, height : f32},
+    DiscCollision( f32)
+}
+
+impl Collision {
+    fn get_size(&self) -> Size {
+        match self {
+            Collision::RectCollision{width, height} => Size{x:*width, y:*height},
+            Collision::DiscCollision(radius) => Size{x:*radius, y:*radius},
+        }
+    }
+}
+
+fn collides( pos1 : &Position, col1 : &Collision, pos2 : &Position, col2 : &Collision) -> bool {
+    let v1 = Point2::<f32>{x : pos1.x ,y : pos1.y };
+    let v2 = Point2::<f32>{x : pos2.x ,y : pos2.y };
+    let delta = v2-v1;
+
+    match (col1, col2) {
+        ( Collision::RectCollision{width : width1, height:height1}, Collision::RectCollision{width : width2, height:height2}) => {            
+            if delta.x.abs() < width1 + width2 {
+                return true
+            }
+            if delta.y.abs() < height1 + height2 {
+                return true
+            }    
+            return false
+        },
+        _ => {
+            return false
+        }
+    }        
+}
+
+enum ActorType {
+    Background,
+    Foreground,
+    Player,
+    EndGame
+}
 
 pub struct Actor {
-    transform  : mint::Point2::<f32>,
-    mesh_idx   : usize,
-    rect_desc  : Option::<RectDescriptor>,
-    dead       : bool
+    transform  : Position,    
+    drawable   : RectDraw,
+    collision  : Collision,
+    dead       : bool,
+    visible    : bool,
+    atype      : ActorType
 }
 
+
+
 impl Actor {
-    pub fn default() -> Actor {
+    pub fn new(atype : ActorType) -> Actor {
         Actor {
-            transform: mint::Point2::<f32>{ x:0.0, y:0.0},
-            mesh_idx: 0,
-            rect_desc: None,
-            dead : false
+            transform: Position{ x:0.0, y:0.0},
+            drawable : RectDraw::StaticRect(0),
+            collision: Collision::DiscCollision(0.0),
+            dead     : false,
+            visible  : true,
+            atype    : atype
         }
     }
 }
@@ -68,9 +158,9 @@ impl Default for InputState {
 }
 
 pub struct Player{
-    score : i32,
-    actor : Actor,
-    input : InputState
+    score     : i32,
+    actor_idx : usize,
+    input     : InputState
 }
 
 
@@ -78,10 +168,37 @@ pub struct World {
     size: [f64; 2]
 }
 
+struct Scene {
+    actors: Vec::<usize>,    
+    active: bool
+}
+
+impl Scene {
+    pub fn new() -> Scene {
+        Scene {
+            actors : Vec::<usize>::new(),            
+            active : false
+        }
+    }
+    // pub fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
+    //     Ok(())    
+    // }
+
+    // pub fn tick(&mut self, app: &mut App, ctx: &mut Context) -> GameResult<()> {
+    //     for a in &mut self.actors {
+    //         if a.dead {
+    //             continue;
+    //         }
+    //         // a.tick(self, app, ctx);
+    //     }    
+    // Ok(())
+    // }
+}
 
 struct App {
     font  : graphics::Font,
     text  : graphics::Text,
+    scenes: Vec::<Scene>, 
     actors: Vec::<Actor>,
     meshes: Vec::<Mesh>,
     player: Option<Player>,
@@ -102,6 +219,7 @@ impl App {
         App {
             font   : font,
             text   : text,
+            scenes : Vec::<Scene>::new(), 
             actors : Vec::<Actor>::new(),
             meshes : Vec::<Mesh>::new(),
             player : None,
@@ -111,65 +229,86 @@ impl App {
     }
 
     fn add_player(&mut self) {
-        let size = 10;
-        let mut a = Actor::default();
-        a.rect_desc = Some( RectDescriptor {
-            color   : Color{r:0.1, g:0.0, b:1.0, a:1.0},
-            size    : mint::Point2::<f32>{ x:size as f32, y:size as f32},
-        } );
+        self.scenes.push(Scene::new());
+        let s = self.scenes.last_mut().unwrap();
+        
+        let mut a = Actor::new(ActorType::Player);
 
-        a.transform = mint::Point2::<f32>{ x:320 as f32, y:240 as f32};
+        let size : f32 = 10.0;
+
+        a.drawable = RectDraw::DynamicRect {
+            color   : Color{r:0.1, g:0.0, b:1.0, a:1.0},
+            size    : Size{ x:size, y:size},
+        };
+
+        a.collision = Collision::RectCollision { width: size, height: size };
+
+        a.transform = Position{ x:320 as f32, y:240 as f32};
+        self.actors.push(a);
 
         self.player = Some( Player{
-            score: 0,
-            actor: a,
-            input: InputState::default()
-        })
+            score    : 0,
+            actor_idx: self.actors.len() - 1,
+            input    : InputState:: default()
+        });
+
+                
     }
 
-    fn add_foreground_rects(&mut self, _ctx : &mut Context){
-
+    fn add_foreground_rects(&mut self){
+        self.scenes.push(Scene::new());
+        let s = self.scenes.last_mut().unwrap();
         const MAX_SIZE : f64 = 50.0;
         for _i in 1..100 {
-            let mut a = Actor::default();
+            let mut a = Actor::new(ActorType::Foreground);
 
             let mut rng = rand::thread_rng();
-            let x    = rng.gen_range(0.0, self.world.size[0]);
-            let y    = rng.gen_range(0.0, self.world.size[1]);
-            let size = rng.gen_range(0.0, MAX_SIZE);
+            let x    = rng.gen_range(0.0, self.world.size[0]) as f32;
+            let y    = rng.gen_range(0.0, self.world.size[1]) as f32;
+            let size = rng.gen_range(0.0, MAX_SIZE) as f32;
             let r    = 1.0;
             let b    = rng.gen_range(0.0, 1.0);
 
-            a.transform = mint::Point2::<f32>{ x:x as f32, y:y as f32};
+            a.transform = Position{ x:x, y:y};
 
-            a.rect_desc = Some( RectDescriptor {
-
+            a.drawable = RectDraw::DynamicRect {
                 color   : Color{r:r, g:r, b:b, a:1.0},
-                size    : mint::Point2::<f32>{ x:size as f32, y:size as f32},
-            } );
+                size    : Size{ x:size, y:size},
+            };            
+
+            a.collision = Collision::RectCollision { width: size, height: size };
 
             self.actors.push(a);
+            s.actors.push( self.actors.len() - 1);
         }
+        
     }
 
-    fn add_end_rects(&mut self, _ctx : &mut Context){
-        let mut a = Actor::default();
-        a.transform = mint::Point2::<f32>{ x:self.world.size[0] as f32, y:0 as f32};
+    fn add_end_rects(&mut self){
+        self.scenes.push(Scene::new());
+        let s = self.scenes.last_mut().unwrap();
 
-        a.rect_desc = Some( RectDescriptor {
+        let mut a = Actor::new(ActorType::EndGame);
+        a.transform = Position{ x:self.world.size[0] as f32, y:0 as f32};
+        a.drawable = RectDraw::DynamicRect {
 
             color   : RED,
-            size    : mint::Point2::<f32>{ x:50 as f32, y:self.world.size[1] as f32},
-        } );
+            size    : Size{ x:50 as f32, y:self.world.size[1] as f32},
+        };
 
         self.actors.push(a);
+        s.actors.push( self.actors.len() - 1);       
     }
 
     fn add_background_rects(&mut self, ctx : &mut Context){
+        
+        self.scenes.push(Scene::new());
+        let s = self.scenes.last_mut().unwrap();
+
         const MAX_SIZE : f64 = 50.0;
         let mut mb = graphics::MeshBuilder::new();
 
-        let mut a = Actor::default();
+        let mut a = Actor::new(ActorType::Background);
 
         for _i in 1..10000 {
             let mut rng = rand::thread_rng();
@@ -188,20 +327,21 @@ impl App {
 
         let mesh = mb.build(ctx).unwrap();
         self.meshes.push(mesh);
-        a.mesh_idx = self.meshes.len();
+        a.drawable = RectDraw::StaticRect( self.meshes.len() - 1);
         self.actors.push(a);
+        
     }
 }
 
-fn player_handle_input(p: &mut Player) {
+fn player_handle_input(p: &Player, pa : &mut Actor) {
 
     const MOVE_STEP : f32 = -10.0;    
     
-    let mut movex = p.input.xaxis * -MOVE_STEP;
-    let mut movey = p.input.yaxis * MOVE_STEP;
+    let movex = p.input.xaxis * -MOVE_STEP;
+    let movey = p.input.yaxis * MOVE_STEP;
         
-    p.actor.transform.x += movex;
-    p.actor.transform.y += movey;
+    pa.transform.x += movex;
+    pa.transform.y += movey;
     
 }
 
@@ -210,33 +350,56 @@ impl EventHandler for App {
         // Update code here...
         self.cam_transform[0] -= 1.0;
 
-        if let Some(pa) = self.player.as_mut(){
+        
 
-            // default moving forward.
-            pa.actor.transform.x += 1.0;
-
-            //processing input
-            player_handle_input(pa);
-            
-            let r2 = pa.actor.rect_desc.as_ref().unwrap();
+        if let Some(pa) = &self.player{            
+            if let Some(player_actor) = self.actors.get_mut(pa.actor_idx){
+                // default moving forward.
+                player_actor.transform.x += 1.0;                    
+                //processing input
+                player_handle_input(&pa, player_actor);
+            }
+        }
+        
+        if let Some(pa) = &self.player.as_mut(){            
+            let mut size1      = Size{x : 0.0, y: 0.0};
+            let mut pos1       = Position{x : 0.0, y: 0.0};
+            let mut collision1 = Collision::DiscCollision(0.0);
+            if let Some(player_actor) = self.actors.get(pa.actor_idx){
+                // let r2 = player_actor.collision;
+                size1      = player_actor.collision.get_size();
+                pos1       = Position{x : player_actor.transform.x + size1.x/2.0,y : player_actor.transform.y + size1.y/2.0};
+                collision1 = player_actor.collision;
+            }
+             
+            let mut score = 0;
             for a in &mut self.actors {
-                if a.dead {
+                if let ActorType::Background = a.atype {
                     continue;
                 }
-                if let Some(r) = a.rect_desc.as_mut() {
-                    let square_dist =(r.size.x+r2.size.x) * (r.size.x+r2.size.x) * 0.25;
-                    let v1 = Point2::<f32>{x : a.transform.x + r.size.x/2.0,y : a.transform.y + r.size.y/2.0};
-                    let v2 = Point2::<f32>{x : pa.actor.transform.x + r2.size.x/2.0,y : pa.actor.transform.y + r2.size.y/2.0};
-                    if (v1 - v2).magnitude2() < square_dist{
-                        r.color = RED;
-                        pa.score += 1;
-                        a.dead = true;
-                    }
+                if let ActorType::Player = a.atype {
+                    continue;
                 }
+                if a.dead {
+                    continue;
+                }                    
+
+                let size2 = a.collision.get_size();                    
+                let pos2 = Position{x : a.transform.x + size2.x/2.0,y : a.transform.y + size2.y/2.0};
+                
+                if collides(&pos1, &collision1, &pos2, &a.collision){
+                    if let RectDraw::DynamicRect{ref mut color, ..} = a.drawable {
+                        *color = RED;
+                    }                        
+                    score += 1;
+                    a.dead = true;
+                }
+
             }
-
+                
+            
         }
-
+        
         println!("FPS: {}", ggez::timer::fps(_ctx));
         Ok(())
     }
@@ -249,42 +412,15 @@ impl EventHandler for App {
         graphics::push_transform(ctx, Some(transform));
         graphics::apply_transformations(ctx).unwrap();
 
-        // Draw code here...
         let mut mb = graphics::MeshBuilder::new();
+        
+        // Draw code here...        
         for a in &self.actors {
-            if a.mesh_idx !=0 {
-                self.meshes[a.mesh_idx-1].draw(ctx, DrawParam::default().dest(a.transform)).unwrap();
-            } else{
-                let rect = &a.rect_desc.as_ref().unwrap();
-                mb.rectangle(
-                    DrawMode::fill(),
-                    Rect {
-                        x:a.transform.x,
-                        y:a.transform.y,
-                        w:rect.size.x,
-                        h:rect.size.y
-                    },
-                    rect.color,
-                );
-
+            if !a.visible {
+                continue;
             }
-        }
-
-
-        // draw player
-        if let Some(player) = &self.player {
-            let rect = &player.actor.rect_desc.as_ref().unwrap();
-            mb.rectangle(
-                DrawMode::fill(),
-                Rect {
-                    x:player.actor.transform.x,
-                    y:player.actor.transform.y,
-                    w:rect.size.x,
-                    h:rect.size.y
-                },
-                rect.color,
-            );
-        }
+            a.drawable.draw(a.transform, &mut mb, &mut self.meshes, ctx);
+        }    
 
         let mesh = mb.build(ctx).unwrap();
         mesh.draw(ctx, DrawParam::default().dest([0.0,0.0])).unwrap();
@@ -377,8 +513,8 @@ fn main() {
     let mut app = App::new(&mut ctx);
 
     app.add_background_rects(& mut ctx);
-    app.add_foreground_rects(& mut ctx);
-    app.add_end_rects(& mut ctx);
+    app.add_foreground_rects();
+    app.add_end_rects();
     app.add_player();
 
 

@@ -26,6 +26,7 @@ const RED  : Color = Color{ r: 1.0, g:0.0, b:0.0, a:1.0};
 
 
 enum RectDraw{
+    NoDraw,
     StaticRect(usize),
     DynamicRect{ color : Color, size : mint::Point2::<f32>}
 }
@@ -33,6 +34,7 @@ enum RectDraw{
 impl RectDraw {
     fn draw(&self, transform : Position, mb : &mut graphics::MeshBuilder, meshes : &mut Vec::<Mesh>, ctx : &mut Context){
         match self {
+            RectDraw::NoDraw => (),
             RectDraw::StaticRect(idx) => {
                 meshes[*idx].draw(ctx, DrawParam::default().dest(transform));    
             },
@@ -53,23 +55,9 @@ impl RectDraw {
     }
 }
 
-// impl RectDescriptor{
-//     pub fn dynamic_draw(&self, mb : &mut graphics::MeshBuilder, transform: mint::Point2::<f32>){
-//         mb.rectangle(
-//             DrawMode::fill(),
-//             Rect {
-//                 x:transform.x,
-//                 y:transform.y,
-//                 w:self.size.x,
-//                 h:self.size.y
-//             },
-//             self.color,
-//         );   
-//     }
-// }
-
 #[derive(Debug, Copy, Clone)]
 enum Collision{
+    NoCollision,
     RectCollision{ width : f32, height : f32},
     DiscCollision( f32)
 }
@@ -79,6 +67,7 @@ impl Collision {
         match self {
             Collision::RectCollision{width, height} => Size{x:*width, y:*height},
             Collision::DiscCollision(radius) => Size{x:*radius, y:*radius},
+            Collision::NoCollision => Size{x:0.0, y:0.0}
         }
     }
 }
@@ -90,13 +79,13 @@ fn collides( pos1 : &Position, col1 : &Collision, pos2 : &Position, col2 : &Coll
 
     match (col1, col2) {
         ( Collision::RectCollision{width : width1, height:height1}, Collision::RectCollision{width : width2, height:height2}) => {            
-            if delta.x.abs() < width1 + width2 {
-                return true
+            if delta.x.abs() > ((width1 + width2)/2.0)  {
+                return false
             }
-            if delta.y.abs() < height1 + height2 {
-                return true
+            if delta.y.abs() > ((height1 + height2)/2.0) {
+                return false
             }    
-            return false
+            return true
         },
         _ => {
             return false
@@ -104,7 +93,7 @@ fn collides( pos1 : &Position, col1 : &Collision, pos2 : &Position, col2 : &Coll
     }        
 }
 
-enum ActorType {
+pub enum ActorType {
     Background,
     Foreground,
     Player,
@@ -128,8 +117,8 @@ impl Actor {
             transform: Position{ x:0.0, y:0.0},
             drawable : RectDraw::StaticRect(0),
             collision: Collision::DiscCollision(0.0),
-            dead     : false,
-            visible  : true,
+            dead     : true,
+            visible  : false,
             atype    : atype
         }
     }
@@ -168,7 +157,39 @@ pub struct World {
     size: [f64; 2]
 }
 
+enum Effect{
+    MoveActor{actor_idx: usize, vector: Position},
+    KillActor{actor_idx: usize},
+    // NextScene{cur_scene_idx : usize, next_scene_idx : usize}
+}
+
+impl Effect{
+    pub fn apply(&self, app : &mut App){
+        match self{
+            Effect::MoveActor{actor_idx, vector} => {
+                let a = &mut app.actors[*actor_idx];
+                a.transform.x += vector.x;
+                a.transform.y += vector.y;
+            },
+            Effect::KillActor{actor_idx} => {
+                let a = &mut app.actors[*actor_idx];
+                if let RectDraw::DynamicRect{ref mut color, ..} = a.drawable {
+                    *color = RED;
+                }                                        
+                a.dead = true;
+            },
+            // Effect::NextScene{cur_scene_idx, next_scene_idx} => {
+            //     let current_scene = &mut app.scenes[*cur_scene_idx];
+            //     current_scene.stop(app);
+            //     let next_scene = &app.scenes[*next_scene_idx];
+            //     next_scene.start(app);
+            // }
+        }
+    }
+}
+
 struct Scene {
+    effects : Vec::<Effect>,
     actors: Vec::<usize>,    
     active: bool
 }
@@ -176,23 +197,33 @@ struct Scene {
 impl Scene {
     pub fn new() -> Scene {
         Scene {
+            effects : Vec::<Effect>::new(),
             actors : Vec::<usize>::new(),            
             active : false
         }
     }
-    // pub fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
-    //     Ok(())    
-    // }
 
-    // pub fn tick(&mut self, app: &mut App, ctx: &mut Context) -> GameResult<()> {
-    //     for a in &mut self.actors {
-    //         if a.dead {
-    //             continue;
-    //         }
-    //         // a.tick(self, app, ctx);
-    //     }    
-    // Ok(())
-    // }
+    pub fn start(&self, app : &mut App ){
+        for i in &self.actors{            
+            let a = &mut app.actors[*i];
+            a.visible = true;
+            a.dead    = false;
+        }
+    }
+
+    pub fn stop(&self, app : &mut App ){
+        for i in &self.actors{            
+            let a = &mut app.actors[*i];
+            a.visible = false;
+            a.dead    = true;
+        }
+    }
+
+    pub fn apply_effects(&self, app : &mut App ){
+        for eff in &self.effects{            
+            eff.apply(app);
+        }
+    }
 }
 
 struct App {
@@ -204,6 +235,7 @@ struct App {
     player: Option<Player>,
     world : World,
     cam_transform: [f32; 2],
+    started: bool,
     // Your state here...
 }
 
@@ -225,6 +257,7 @@ impl App {
             player : None,
             world  : World{ size: [3000.0, 640.0]},
             cam_transform: [0.0, 0.0],
+            started : false
         }
     }
 
@@ -237,7 +270,7 @@ impl App {
         let size : f32 = 10.0;
 
         a.drawable = RectDraw::DynamicRect {
-            color   : Color{r:0.1, g:0.0, b:1.0, a:1.0},
+            color   : RED,
             size    : Size{ x:size, y:size},
         };
 
@@ -347,10 +380,14 @@ fn player_handle_input(p: &Player, pa : &mut Actor) {
 
 impl EventHandler for App {
     fn update(&mut self, _ctx: &mut Context) -> GameResult<()> {
-        // Update code here...
-        self.cam_transform[0] -= 1.0;
+        // if !self.started{
+        //     let s = &mut self.scenes[0];
+        //     s.start(self);
+        // }
 
-        
+
+        // Update code here...
+        self.cam_transform[0] -= 1.0;        
 
         if let Some(pa) = &self.player{            
             if let Some(player_actor) = self.actors.get_mut(pa.actor_idx){
@@ -361,18 +398,15 @@ impl EventHandler for App {
             }
         }
         
-        if let Some(pa) = &self.player.as_mut(){            
-            let mut size1      = Size{x : 0.0, y: 0.0};
+        if let Some(pa) = self.player.as_mut(){                        
             let mut pos1       = Position{x : 0.0, y: 0.0};
             let mut collision1 = Collision::DiscCollision(0.0);
-            if let Some(player_actor) = self.actors.get(pa.actor_idx){
-                // let r2 = player_actor.collision;
-                size1      = player_actor.collision.get_size();
+            if let Some(player_actor) = self.actors.get(pa.actor_idx){                
+                let size1  = player_actor.collision.get_size();
                 pos1       = Position{x : player_actor.transform.x + size1.x/2.0,y : player_actor.transform.y + size1.y/2.0};
                 collision1 = player_actor.collision;
             }
-             
-            let mut score = 0;
+                         
             for a in &mut self.actors {
                 if let ActorType::Background = a.atype {
                     continue;
@@ -391,7 +425,7 @@ impl EventHandler for App {
                     if let RectDraw::DynamicRect{ref mut color, ..} = a.drawable {
                         *color = RED;
                     }                        
-                    score += 1;
+                    pa.score += 1;
                     a.dead = true;
                 }
 

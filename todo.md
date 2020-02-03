@@ -8,10 +8,11 @@
 
 ## v0.0.2
 - scenes : start and end game.
+- effects
+
+
+## v0.0.3
 - layout ( ui )
 - camera border.
 - projectile ?
-
-## v0.0.3
-- effects
 - ground

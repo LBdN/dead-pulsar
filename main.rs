@@ -28,7 +28,10 @@ const RED  : Color = Color{ r: 1.0, g:0.0, b:0.0, a:1.0};
 enum RectDraw{
     NoDraw,
     StaticRect(usize),
-    DynamicRect{ color : Color, size : mint::Point2::<f32>}
+    DynamicRect{ color : Color, size : mint::Point2::<f32>},
+    StaticText{text: graphics::Text },
+    DynamicTextDraw { string: String, font : graphics::Font, fontsize : f32, color: graphics::Color},
+    
 }
 
 impl RectDraw {
@@ -36,7 +39,7 @@ impl RectDraw {
         match self {
             RectDraw::NoDraw => (),
             RectDraw::StaticRect(idx) => {
-                meshes[*idx].draw(ctx, DrawParam::default().dest(transform));    
+                let _ = meshes[*idx].draw(ctx, DrawParam::default().dest(transform));    
             },
             RectDraw::DynamicRect{color, size} => {
                 mb.rectangle(
@@ -50,9 +53,22 @@ impl RectDraw {
                     *color,
                 );
             },
+            RectDraw::StaticText{text} =>{
+                let _ = text.draw(ctx, DrawParam::default().dest(transform));
+            },                        
+            RectDraw::DynamicTextDraw{string, font, fontsize, color} => {
+                let text = graphics::Text::new( (string.clone() , *font, *fontsize) );                
+                let _ = text.draw(ctx, DrawParam::default().dest(transform).color(*color));
+            },
             _ => ()
         } 
     }
+}
+
+#[derive(Copy, Clone, PartialEq)]
+enum DrawContext{
+    WorldSpace,
+    ScreenSpace
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -93,17 +109,22 @@ fn collides( pos1 : &Position, col1 : &Collision, pos2 : &Position, col2 : &Coll
     }        
 }
 
+#[derive(PartialEq)]
 pub enum ActorType {
     Background,
     Foreground,
     Player,
-    EndGame
+    EndGame,
+    UI,
+    Camera
 }
 
 pub struct Actor {
     transform  : Position,    
     drawable   : RectDraw,
+    drawctx    : DrawContext,
     collision  : Collision,
+    col_resp   : Vec::<Effect>,
     dead       : bool,
     visible    : bool,
     atype      : ActorType
@@ -116,7 +137,9 @@ impl Actor {
         Actor {
             transform: Position{ x:0.0, y:0.0},
             drawable : RectDraw::StaticRect(0),
+            drawctx  : DrawContext::WorldSpace,
             collision: Collision::DiscCollision(0.0),
+            col_resp : Vec::<Effect>::new(),
             dead     : true,
             visible  : false,
             atype    : atype
@@ -152,15 +175,22 @@ pub struct Player{
     input     : InputState
 }
 
+pub struct Camera{
+    actor_idx : usize
+}
+
 
 pub struct World {
     size: [f64; 2]
 }
 
+#[derive(Debug, Copy, Clone)]
 enum Effect{
     MoveActor{actor_idx: usize, vector: Position},
+    UpdateScore{actor_idx: usize},
+    ProcessInput,
     KillActor{actor_idx: usize},
-    // NextScene{cur_scene_idx : usize, next_scene_idx : usize}
+    NextScene{cur_scene_idx : usize, next_scene_idx : usize}
 }
 
 impl Effect{
@@ -171,6 +201,24 @@ impl Effect{
                 a.transform.x += vector.x;
                 a.transform.y += vector.y;
             },
+            Effect::UpdateScore{actor_idx} => {
+                if let Some(pa) = app.player.as_mut(){
+                    
+                    if let Some(label_actor) = app.actors.get_mut(*actor_idx){ 
+                        if let RectDraw::DynamicTextDraw{string, ..} = &mut label_actor.drawable{
+                            *string = format!( "Score: {}", pa.score);
+                        }
+                    }
+                }
+            },
+            Effect::ProcessInput => {
+                if let Some(pa) = &app.player{            
+                    if let Some(player_actor) = app.actors.get_mut(pa.actor_idx){                        
+                        //processing input
+                        player_handle_input(&pa, player_actor);
+                    }
+                }
+            },
             Effect::KillActor{actor_idx} => {
                 let a = &mut app.actors[*actor_idx];
                 if let RectDraw::DynamicRect{ref mut color, ..} = a.drawable {
@@ -178,21 +226,25 @@ impl Effect{
                 }                                        
                 a.dead = true;
             },
-            // Effect::NextScene{cur_scene_idx, next_scene_idx} => {
-            //     let current_scene = &mut app.scenes[*cur_scene_idx];
-            //     current_scene.stop(app);
-            //     let next_scene = &app.scenes[*next_scene_idx];
-            //     next_scene.start(app);
-            // }
+            Effect::NextScene{cur_scene_idx, next_scene_idx} => {
+                let current_scene = &mut app.scenes[*cur_scene_idx];                
+                current_scene.active = false;
+                current_scene.clone().stop(app);
+                let next_scene = &mut app.scenes[*next_scene_idx];
+                next_scene.active = true;
+                next_scene.clone().start(app);
+            }
         }
     }
 }
 
+#[derive(Debug, Clone)]
 struct Scene {
     effects : Vec::<Effect>,
     actors: Vec::<usize>,    
     active: bool
 }
+
 
 impl Scene {
     pub fn new() -> Scene {
@@ -219,24 +271,25 @@ impl Scene {
         }
     }
 
-    pub fn apply_effects(&self, app : &mut App ){
+    pub fn apply_effects(&self, app : &mut App ) ->bool{
+        let before_effect_scene = app.current_scene;
         for eff in &self.effects{            
             eff.apply(app);
         }
+        app.current_scene != before_effect_scene 
     }
 }
 
 struct App {
-    font  : graphics::Font,
-    text  : graphics::Text,
+    font  : graphics::Font,    
     scenes: Vec::<Scene>, 
     actors: Vec::<Actor>,
     meshes: Vec::<Mesh>,
     player: Option<Player>,
-    world : World,
-    cam_transform: [f32; 2],
+    camera: Camera,
+    world : World,    
     started: bool,
-    // Your state here...
+    current_scene : usize    
 }
 
 impl App {
@@ -245,25 +298,42 @@ impl App {
         // let assets = find_folder::Search::ParentsThenKids(3, 3).for_folder("res").unwrap();
         // let fp     = assets.join("FiraMono-Bold.ttf");
         let font = graphics::Font::new(ctx, "/FiraMono-Bold.ttf").unwrap();
-        let text = graphics::Text::new(("Pulsar 3", font, 28.0));
-
-
+        
         App {
-            font   : font,
-            text   : text,
+            font   : font,            
             scenes : Vec::<Scene>::new(), 
             actors : Vec::<Actor>::new(),
             meshes : Vec::<Mesh>::new(),
             player : None,
-            world  : World{ size: [3000.0, 640.0]},
-            cam_transform: [0.0, 0.0],
-            started : false
+            camera : Camera{ actor_idx : 0 },
+            world  : World{ size: [3000.0, 640.0]},            
+            started : false,
+            current_scene : 0
         }
     }
 
-    fn add_player(&mut self) {
+    fn create_scene(&mut self) -> usize {
         self.scenes.push(Scene::new());
-        let s = self.scenes.last_mut().unwrap();
+        return self.scenes.len() -1;
+    }
+
+    fn add_camera(&mut self, scene_idx: usize) ->usize {
+        let mut a = Actor::new(ActorType::Camera);
+        a.drawable  = RectDraw::NoDraw;
+        a.collision = Collision::NoCollision;
+        a.transform = Position{ x:0 as f32, y:0 as f32};
+        self.actors.push(a);
+
+        let s = &mut self.scenes[scene_idx];
+        let actor_idx = self.actors.len() -1;
+        s.actors.push(actor_idx);   
+
+        self.camera.actor_idx = actor_idx;
+        return actor_idx;
+    }
+
+    fn add_player(&mut self, scene_idx: usize) ->usize {
+        
         
         let mut a = Actor::new(ActorType::Player);
 
@@ -284,15 +354,19 @@ impl App {
             actor_idx: self.actors.len() - 1,
             input    : InputState:: default()
         });
-
+        
+        let s = &mut self.scenes[scene_idx];
+        let actor_idx = self.actors.len() -1;
+        s.actors.push(actor_idx);   
+        return actor_idx;
                 
     }
 
-    fn add_foreground_rects(&mut self){
-        self.scenes.push(Scene::new());
-        let s = self.scenes.last_mut().unwrap();
+    fn add_foreground_rects(&mut self, scene_idx: usize){
+        
         const MAX_SIZE : f64 = 50.0;
-        for _i in 1..100 {
+        let actor_len = self.actors.len();
+        for i in 1..100 {
             let mut a = Actor::new(ActorType::Foreground);
 
             let mut rng = rand::thread_rng();
@@ -310,34 +384,39 @@ impl App {
             };            
 
             a.collision = Collision::RectCollision { width: size, height: size };
+            a.col_resp.push( Effect::KillActor{actor_idx:i+actor_len-1});
 
-            self.actors.push(a);
-            s.actors.push( self.actors.len() - 1);
+            self.actors.push(a);            
+            let actor_idx = self.actors.len() -1;
+            let s = &mut self.scenes[scene_idx];
+            s.actors.push(actor_idx);   
+
+            
         }
         
     }
 
-    fn add_end_rects(&mut self){
-        self.scenes.push(Scene::new());
-        let s = self.scenes.last_mut().unwrap();
+    fn add_end_rects(&mut self, scene_idx: usize) -> usize{
+        
 
         let mut a = Actor::new(ActorType::EndGame);
         a.transform = Position{ x:self.world.size[0] as f32, y:0 as f32};
+        let size = Size{ x:50 as f32, y:self.world.size[1] as f32};
+        a.collision = Collision::RectCollision { width: size.x, height: size.y };
         a.drawable = RectDraw::DynamicRect {
-
             color   : RED,
-            size    : Size{ x:50 as f32, y:self.world.size[1] as f32},
+            size    : size,
         };
 
         self.actors.push(a);
-        s.actors.push( self.actors.len() - 1);       
+        let s = &mut self.scenes[scene_idx];
+        let end_idx = self.actors.len() -1;
+        s.actors.push(end_idx);   
+        end_idx        
     }
 
-    fn add_background_rects(&mut self, ctx : &mut Context){
+    fn add_background_rects(&mut self, ctx : &mut Context, scene_idx: usize){
         
-        self.scenes.push(Scene::new());
-        let s = self.scenes.last_mut().unwrap();
-
         const MAX_SIZE : f64 = 50.0;
         let mut mb = graphics::MeshBuilder::new();
 
@@ -362,8 +441,29 @@ impl App {
         self.meshes.push(mesh);
         a.drawable = RectDraw::StaticRect( self.meshes.len() - 1);
         self.actors.push(a);
-        
+        let s = &mut self.scenes[scene_idx];
+        s.actors.push(self.actors.len() -1);
     }
+
+    fn add_text(&mut self, text: String, fontsize: f32, pos: Position, static_:bool, scene_idx: usize) -> usize{
+        let mut a   = Actor::new(ActorType::UI);
+        a.drawctx   = DrawContext::ScreenSpace;
+        if static_{
+            let gtext   = graphics::Text::new((text, self.font, fontsize));
+            a.drawable  = RectDraw::StaticText{ text: gtext };            
+        } else {
+            a.drawable = RectDraw::DynamicTextDraw{ string: text, font : self.font, fontsize : fontsize, color: graphics::WHITE};
+        }
+        
+        a.transform = pos;
+        self.actors.push(a);
+        let s = &mut self.scenes[scene_idx];
+        let actor_idx = self.actors.len() -1;
+        s.actors.push(actor_idx);
+        return actor_idx;
+    }
+
+
 }
 
 fn player_handle_input(p: &Player, pa : &mut Actor) {
@@ -380,23 +480,22 @@ fn player_handle_input(p: &Player, pa : &mut Actor) {
 
 impl EventHandler for App {
     fn update(&mut self, _ctx: &mut Context) -> GameResult<()> {
-        // if !self.started{
-        //     let s = &mut self.scenes[0];
-        //     s.start(self);
-        // }
+        if !self.started{
+            self.current_scene = 0;
+            let s = self.scenes[self.current_scene].clone();
+            s.start(self);
+            self.started = true;            
+        }
+
+        let s = self.scenes[self.current_scene].clone();
+        let scene_changed = s.apply_effects(self);
+        if scene_changed{
+            return Ok(());
+        }
 
 
         // Update code here...
-        self.cam_transform[0] -= 1.0;        
-
-        if let Some(pa) = &self.player{            
-            if let Some(player_actor) = self.actors.get_mut(pa.actor_idx){
-                // default moving forward.
-                player_actor.transform.x += 1.0;                    
-                //processing input
-                player_handle_input(&pa, player_actor);
-            }
-        }
+        
         
         if let Some(pa) = self.player.as_mut(){                        
             let mut pos1       = Position{x : 0.0, y: 0.0};
@@ -422,11 +521,13 @@ impl EventHandler for App {
                 let pos2 = Position{x : a.transform.x + size2.x/2.0,y : a.transform.y + size2.y/2.0};
                 
                 if collides(&pos1, &collision1, &pos2, &a.collision){
-                    if let RectDraw::DynamicRect{ref mut color, ..} = a.drawable {
-                        *color = RED;
-                    }                        
-                    pa.score += 1;
-                    a.dead = true;
+                    // if let RectDraw::DynamicRect{ref mut color, ..} = a.drawable {
+                    //     *color = RED;
+                    // }                        
+                    pa.score += (1000.0 / (size2.x*size2.y)) as i32;
+                    // a.dead = true;
+                    let s = &mut self.scenes[self.current_scene];
+                    s.effects.append(& mut a.col_resp.clone());
                 }
 
             }
@@ -441,34 +542,80 @@ impl EventHandler for App {
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         graphics::clear(ctx, graphics::BLACK);
 
-        // apply canera transform
-        let transform = DrawParam::default().dest(self.cam_transform).to_matrix();
-        graphics::push_transform(ctx, Some(transform));
-        graphics::apply_transformations(ctx).unwrap();
+        
 
         let mut mb = graphics::MeshBuilder::new();
         
         // Draw code here...        
+        let mut smtg_drawn = false;
+
+        let mut draw_ctx = DrawContext::WorldSpace;        
+        let t = self.actors[self.camera.actor_idx].transform;
+        let cam_transform = DrawParam::default().dest(t).to_matrix();
+        graphics::push_transform(ctx, Some(cam_transform));
+        graphics::apply_transformations(ctx).unwrap();
+
         for a in &self.actors {
             if !a.visible {
                 continue;
             }
+            if a.atype == ActorType::UI{
+                continue;
+            }
+
+            if draw_ctx != a.drawctx {
+                if let DrawContext::ScreenSpace = a.drawctx {
+                    graphics::pop_transform(ctx);
+                    graphics::apply_transformations(ctx).unwrap();            
+                }
+                if let DrawContext::WorldSpace = a.drawctx{                    
+                    graphics::push_transform(ctx, Some(cam_transform));
+                    graphics::apply_transformations(ctx).unwrap();
+                }
+                draw_ctx = a.drawctx;
+            }
+
             a.drawable.draw(a.transform, &mut mb, &mut self.meshes, ctx);
+            if let RectDraw::DynamicRect{color:_, size:_} = a.drawable{
+                smtg_drawn = true;
+            }
+            
+        }    
+        if smtg_drawn == true{
+            // let transform = DrawParam::default().dest(self.cam_transform).to_matrix();
+            graphics::push_transform(ctx, Some(cam_transform));
+            graphics::apply_transformations(ctx).unwrap();
+            let mesh = mb.build(ctx).unwrap();
+            mesh.draw(ctx, DrawParam::default().dest([0.0,0.0])).unwrap();
+        }
+        
+
+        let mut draw_ctx = DrawContext::WorldSpace;      
+        graphics::pop_transform(ctx);
+        graphics::apply_transformations(ctx).unwrap();           
+        for a in &self.actors {
+            if !a.visible {
+                continue;
+            }
+            if a.atype != ActorType::UI{
+                continue;
+            }
+
+            if draw_ctx != a.drawctx {
+                if let DrawContext::ScreenSpace = a.drawctx {
+                    graphics::pop_transform(ctx);
+                    graphics::apply_transformations(ctx).unwrap();            
+                }
+                if let DrawContext::WorldSpace = a.drawctx{                    
+                    graphics::push_transform(ctx, Some(cam_transform));
+                    graphics::apply_transformations(ctx).unwrap();
+                }
+                draw_ctx = a.drawctx;
+            }
+
+            a.drawable.draw(a.transform, &mut mb, &mut self.meshes, ctx);                        
         }    
 
-        let mesh = mb.build(ctx).unwrap();
-        mesh.draw(ctx, DrawParam::default().dest([0.0,0.0])).unwrap();
-
-        // remove canera transform
-        graphics::pop_transform(ctx);
-        graphics::apply_transformations(ctx).unwrap();
-        let offset = 10.0;
-        let mut dest_point = mint::Point2::<f32>{ x:offset, y:offset};
-        graphics::draw(ctx, &self.text, DrawParam::default().dest(dest_point).color(graphics::WHITE))?;
-
-        let text = graphics::Text::new( (format!("Score {}", self.player.as_ref().unwrap().score) , self.font, 28.0));
-        dest_point.x += (self.text.width(ctx) as f32) + 10.0;
-        graphics::draw(ctx, &text, DrawParam::default().dest(dest_point).color(graphics::WHITE))?;
         graphics::present(ctx)
     }
 
@@ -546,12 +693,47 @@ fn main() {
     // so it can load resources like images during setup.
     let mut app = App::new(&mut ctx);
 
-    app.add_background_rects(& mut ctx);
-    app.add_foreground_rects();
-    app.add_end_rects();
-    app.add_player();
+    let center = Position{x: 320.0, y: 240.0};
 
+    // let scene_idx0 = app.create_scene();
+    // app.add_text("Pulsar 3".to_string(), 28.0, Position{x: 10.0, y: 10.0}, scene_idx0);
 
+    let scene_idx1 = app.create_scene();
+    {
+    app.add_background_rects(& mut ctx, scene_idx1);
+    app.add_foreground_rects(scene_idx1);    
+    let player_actor_idx = app.add_player(scene_idx1);
+    let camera_idx       = app.add_camera(scene_idx1);
+    let text_idx         = app.add_text("Pulsar 3".to_string(), 28.0, Position{x: 10.0, y: 10.0}, true, scene_idx1);
+    
+    let a = &app.actors[text_idx];        
+    let margin = 10.0;
+    let mut p = Position{x:0.0+margin, y: 10.0};
+    if let RectDraw::StaticText{text} = &a.drawable{            
+        p = Position{x:a.transform.x+text.width(&mut ctx) as f32 +margin, y: 10.0};        
+    } 
+    let text_idx = app.add_text("Score: 0".to_string(), 28.0, p, false, scene_idx1);
+    
+    
+    let s = &mut app.scenes[scene_idx1];
+    s.effects.push( Effect::MoveActor{actor_idx:camera_idx, vector:Position{x:-1.0, y:0.0}} );
+    s.effects.push( Effect::MoveActor{actor_idx:player_actor_idx, vector:Position{x:1.0, y:0.0}} );    
+    s.effects.push( Effect::ProcessInput );     
+    s.effects.push( Effect::UpdateScore{actor_idx:text_idx});
+    }
+    let end_game_idx = app.add_end_rects(scene_idx1);
+
+    let scene_idx2 = app.create_scene();
+    {        
+        app.add_text("End Game".to_string(), 28.0, center, true, scene_idx2);
+    }
+
+    {
+        let a = &mut app.actors[end_game_idx];        
+        let end_game_transition = Effect::NextScene{cur_scene_idx : scene_idx1, next_scene_idx : scene_idx2};
+        a.col_resp.push(end_game_transition);        
+    }
+          
 
     // Run!
     match event::run(&mut ctx, &mut event_loop, &mut app) {

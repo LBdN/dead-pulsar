@@ -14,6 +14,8 @@ use ggez::event::KeyMods;
 use ggez::graphics;
 use ggez::conf;
 use ggez::graphics::{DrawParam, Color, Rect, Drawable, DrawMode, Mesh};
+use ggez::timer;
+use std::time;
 
 use cgmath::{Point2};
 use cgmath::prelude::*;
@@ -190,11 +192,12 @@ enum Effect{
     UpdateScore{actor_idx: usize},
     ProcessInput,
     KillActor{actor_idx: usize},
-    NextScene{cur_scene_idx : usize, next_scene_idx : usize}
+    NextScene{cur_scene_idx : usize, next_scene_idx : usize},
+    AutoNextScene{ duration : f32, cur_scene_idx : usize, next_scene_idx : usize}
 }
 
 impl Effect{
-    pub fn apply(&self, app : &mut App){
+    pub fn apply(&self, app : &mut App, t : time::Duration){
         match self{
             Effect::MoveActor{actor_idx, vector} => {
                 let a = &mut app.actors[*actor_idx];
@@ -233,7 +236,21 @@ impl Effect{
                 let next_scene = &mut app.scenes[*next_scene_idx];
                 next_scene.active = true;
                 next_scene.clone().start(app);
+                app.current_scene = *next_scene_idx;
+            },
+            Effect::AutoNextScene{duration, cur_scene_idx, next_scene_idx} => {
+                if *duration < t.as_secs_f32() {
+                    let current_scene = &mut app.scenes[*cur_scene_idx];                                     
+                    current_scene.active = false;
+                    current_scene.clone().stop(app);
+                    let next_scene = &mut app.scenes[*next_scene_idx];
+                    next_scene.active = true;
+                    next_scene.clone().start(app);
+                    app.current_scene = *next_scene_idx;
+                }
+                
             }
+
         }
     }
 }
@@ -242,20 +259,23 @@ impl Effect{
 struct Scene {
     effects : Vec::<Effect>,
     actors: Vec::<usize>,    
-    active: bool
+    active: bool,
+    name: String
 }
 
 
 impl Scene {
-    pub fn new() -> Scene {
+    pub fn new(name: String) -> Scene {
         Scene {
             effects : Vec::<Effect>::new(),
             actors : Vec::<usize>::new(),            
-            active : false
+            active : false,
+            name : name
         }
     }
 
     pub fn start(&self, app : &mut App ){
+        println!("stopping {}", self.name);        
         for i in &self.actors{            
             let a = &mut app.actors[*i];
             a.visible = true;
@@ -263,7 +283,8 @@ impl Scene {
         }
     }
 
-    pub fn stop(&self, app : &mut App ){
+    pub fn stop(&self, app : &mut App ){        
+        println!("starting {}", self.name);
         for i in &self.actors{            
             let a = &mut app.actors[*i];
             a.visible = false;
@@ -271,10 +292,11 @@ impl Scene {
         }
     }
 
-    pub fn apply_effects(&self, app : &mut App ) ->bool{
+    pub fn apply_effects(&self, app : &mut App, t : time::Duration ) ->bool{
+        println!("apply_effects {}", self.name);
         let before_effect_scene = app.current_scene;
         for eff in &self.effects{            
-            eff.apply(app);
+            eff.apply(app, t);
         }
         app.current_scene != before_effect_scene 
     }
@@ -312,8 +334,8 @@ impl App {
         }
     }
 
-    fn create_scene(&mut self) -> usize {
-        self.scenes.push(Scene::new());
+    fn create_scene(&mut self, name : String) -> usize {
+        self.scenes.push(Scene::new(name));
         return self.scenes.len() -1;
     }
 
@@ -483,12 +505,15 @@ impl EventHandler for App {
         if !self.started{
             self.current_scene = 0;
             let s = self.scenes[self.current_scene].clone();
-            s.start(self);
-            self.started = true;            
+            s.start(self);                 
+            let s = &mut self.scenes[self.current_scene];
+            s.active = true;
+            self.started = true;       
         }
 
+        let t = timer::time_since_start(_ctx);
         let s = self.scenes[self.current_scene].clone();
-        let scene_changed = s.apply_effects(self);
+        let scene_changed = s.apply_effects(self, t);
         if scene_changed{
             return Ok(());
         }
@@ -535,7 +560,7 @@ impl EventHandler for App {
             
         }
         
-        println!("FPS: {}", ggez::timer::fps(_ctx));
+        // println!("FPS: {}", ggez::timer::fps(_ctx));
         Ok(())
     }
 
@@ -695,42 +720,46 @@ fn main() {
 
     let center = Position{x: 320.0, y: 240.0};
 
-    // let scene_idx0 = app.create_scene();
-    // app.add_text("Pulsar 3".to_string(), 28.0, Position{x: 10.0, y: 10.0}, scene_idx0);
+    let intro_scene_idx = app.create_scene("intro".to_string());    
+    app.add_text("Pulsar 3".to_string(), 56.0, center, true, intro_scene_idx);
 
-    let scene_idx1 = app.create_scene();
+    let play_scene_idx = app.create_scene("play".to_string());    
     {
-    app.add_background_rects(& mut ctx, scene_idx1);
-    app.add_foreground_rects(scene_idx1);    
-    let player_actor_idx = app.add_player(scene_idx1);
-    let camera_idx       = app.add_camera(scene_idx1);
-    let text_idx         = app.add_text("Pulsar 3".to_string(), 28.0, Position{x: 10.0, y: 10.0}, true, scene_idx1);
-    
-    let a = &app.actors[text_idx];        
-    let margin = 10.0;
-    let mut p = Position{x:0.0+margin, y: 10.0};
-    if let RectDraw::StaticText{text} = &a.drawable{            
-        p = Position{x:a.transform.x+text.width(&mut ctx) as f32 +margin, y: 10.0};        
-    } 
-    let text_idx = app.add_text("Score: 0".to_string(), 28.0, p, false, scene_idx1);
-    
-    
-    let s = &mut app.scenes[scene_idx1];
-    s.effects.push( Effect::MoveActor{actor_idx:camera_idx, vector:Position{x:-1.0, y:0.0}} );
-    s.effects.push( Effect::MoveActor{actor_idx:player_actor_idx, vector:Position{x:1.0, y:0.0}} );    
-    s.effects.push( Effect::ProcessInput );     
-    s.effects.push( Effect::UpdateScore{actor_idx:text_idx});
+        app.add_background_rects(& mut ctx, play_scene_idx);
+        app.add_foreground_rects(play_scene_idx);    
+        let player_actor_idx = app.add_player(play_scene_idx);
+        let camera_idx       = app.add_camera(play_scene_idx);
+        let text_idx         = app.add_text("Pulsar 3".to_string(), 28.0, Position{x: 10.0, y: 10.0}, true, play_scene_idx);
+        
+        let a = &app.actors[text_idx];        
+        let margin = 10.0;
+        let mut p = Position{x:0.0+margin, y: 10.0};
+        if let RectDraw::StaticText{text} = &a.drawable{            
+            p = Position{x:a.transform.x+text.width(&mut ctx) as f32 +margin, y: 10.0};        
+        } 
+        let text_idx = app.add_text("Score: 0".to_string(), 28.0, p, false, play_scene_idx);
+                
+        let s = &mut app.scenes[play_scene_idx];
+        s.effects.push( Effect::MoveActor{actor_idx:camera_idx,       vector:Position{x:-1.0, y:0.0}} );
+        s.effects.push( Effect::MoveActor{actor_idx:player_actor_idx, vector:Position{x :1.0, y:0.0}} );    
+        s.effects.push( Effect::ProcessInput );     
+        s.effects.push( Effect::UpdateScore{actor_idx:text_idx});
     }
-    let end_game_idx = app.add_end_rects(scene_idx1);
+    let end_game_idx = app.add_end_rects(play_scene_idx);
 
-    let scene_idx2 = app.create_scene();
+    let end_scene_idx = app.create_scene("end".to_string());
     {        
-        app.add_text("End Game".to_string(), 28.0, center, true, scene_idx2);
+        app.add_text("End Game".to_string(), 28.0, center, true, end_scene_idx);
     }
 
+    {
+        let s = &mut app.scenes[intro_scene_idx];
+        let auto_transition = Effect::AutoNextScene{duration:3.0, cur_scene_idx : intro_scene_idx, next_scene_idx : play_scene_idx};        
+        s.effects.push( auto_transition );
+    }
     {
         let a = &mut app.actors[end_game_idx];        
-        let end_game_transition = Effect::NextScene{cur_scene_idx : scene_idx1, next_scene_idx : scene_idx2};
+        let end_game_transition = Effect::NextScene{cur_scene_idx : play_scene_idx, next_scene_idx : end_scene_idx};
         a.col_resp.push(end_game_transition);        
     }
           

@@ -16,6 +16,8 @@ use ggez::conf;
 use ggez::graphics::{DrawParam, Color, Rect, Drawable, DrawMode, Mesh};
 use ggez::timer;
 use std::time;
+use ggez::audio;
+use ggez::audio::{SoundSource};
 
 use cgmath::{Point2};
 use cgmath::prelude::*;
@@ -193,7 +195,8 @@ enum Effect{
     ProcessInput,
     KillActor{actor_idx: usize},
     NextScene{cur_scene_idx : usize, next_scene_idx : usize},
-    AutoNextScene{ duration : f32, cur_scene_idx : usize, next_scene_idx : usize}
+    AutoNextScene{ duration : f32, cur_scene_idx : usize, next_scene_idx : usize},
+    PlaySound{sound_index : usize},
 }
 
 impl Effect{
@@ -249,6 +252,10 @@ impl Effect{
                     app.current_scene = *next_scene_idx;
                 }
                 
+            },
+            Effect::PlaySound{sound_index} => {
+                let s = app.sounds[*sound_index].clone();
+                let _ = s.play();
             }
 
         }
@@ -307,6 +314,7 @@ struct App {
     scenes: Vec::<Scene>, 
     actors: Vec::<Actor>,
     meshes: Vec::<Mesh>,
+    sounds: Vec::<audio::Source>,
     player: Option<Player>,
     camera: Camera,
     world : World,    
@@ -319,24 +327,36 @@ impl App {
         // Load/create resources here: images, fonts, sounds, etc.
         // let assets = find_folder::Search::ParentsThenKids(3, 3).for_folder("res").unwrap();
         // let fp     = assets.join("FiraMono-Bold.ttf");
-        let font = graphics::Font::new(ctx, "/FiraMono-Bold.ttf").unwrap();
+
         
+        let font = graphics::Font::new(ctx, "/font/edundot.ttf").unwrap();
+
         App {
             font   : font,            
             scenes : Vec::<Scene>::new(), 
             actors : Vec::<Actor>::new(),
             meshes : Vec::<Mesh>::new(),
+            sounds : Vec::<audio::Source>::new(),
             player : None,
             camera : Camera{ actor_idx : 0 },
             world  : World{ size: [3000.0, 640.0]},            
             started : false,
             current_scene : 0
         }
+
+
+        
     }
 
     fn create_scene(&mut self, name : String) -> usize {
         self.scenes.push(Scene::new(name));
         return self.scenes.len() -1;
+    }
+
+    fn add_sound(&mut self, rel_path : String,  ctx : &mut Context) -> usize{        
+        let sound = audio::Source::new(ctx, rel_path).unwrap();
+        self.sounds.push(sound);
+        return self.sounds.len() - 1;
     }
 
     fn add_camera(&mut self, scene_idx: usize) ->usize {
@@ -384,7 +404,7 @@ impl App {
                 
     }
 
-    fn add_foreground_rects(&mut self, scene_idx: usize){
+    fn add_foreground_rects(&mut self, scene_idx: usize, sound_path : String){
         
         const MAX_SIZE : f64 = 50.0;
         let actor_len = self.actors.len();
@@ -407,6 +427,7 @@ impl App {
 
             a.collision = Collision::RectCollision { width: size, height: size };
             a.col_resp.push( Effect::KillActor{actor_idx:i+actor_len-1});
+            a.col_resp.push( eff);            
 
             self.actors.push(a);            
             let actor_idx = self.actors.len() -1;
@@ -726,7 +747,9 @@ fn main() {
     let play_scene_idx = app.create_scene("play".to_string());    
     {
         app.add_background_rects(& mut ctx, play_scene_idx);
-        app.add_foreground_rects(play_scene_idx);    
+        let sound_idx = app.add_sound("/Randomize6.wav".to_string(), &mut ctx);
+        let eff = Effect::PlaySound{sound_index:sound_idx};
+        app.add_foreground_rects(play_scene_idx, eff);    
         let player_actor_idx = app.add_player(play_scene_idx);
         let camera_idx       = app.add_camera(play_scene_idx);
         let text_idx         = app.add_text("Pulsar 3".to_string(), 28.0, Position{x: 10.0, y: 10.0}, true, play_scene_idx);

@@ -200,22 +200,23 @@ enum Effect{
 }
 
 impl Effect{
-    pub fn apply(&self, app : &mut App, t : time::Duration){
+    pub fn apply(&self, app : &mut App, t : f32) -> bool{
         match self{
             Effect::MoveActor{actor_idx, vector} => {
                 let a = &mut app.actors[*actor_idx];
                 a.transform.x += vector.x;
                 a.transform.y += vector.y;
+                return false;
             },
             Effect::UpdateScore{actor_idx} => {
-                if let Some(pa) = app.player.as_mut(){
-                    
+                if let Some(pa) = app.player.as_mut(){                    
                     if let Some(label_actor) = app.actors.get_mut(*actor_idx){ 
                         if let RectDraw::DynamicTextDraw{string, ..} = &mut label_actor.drawable{
                             *string = format!( "Score: {}", pa.score);
                         }
                     }
                 }
+                return false;
             },
             Effect::ProcessInput => {
                 if let Some(pa) = &app.player{            
@@ -224,6 +225,7 @@ impl Effect{
                         player_handle_input(&pa, player_actor);
                     }
                 }
+                return false;
             },
             Effect::KillActor{actor_idx} => {
                 let a = &mut app.actors[*actor_idx];
@@ -231,6 +233,7 @@ impl Effect{
                     *color = RED;
                 }                                        
                 a.dead = true;
+                return true;
             },
             Effect::NextScene{cur_scene_idx, next_scene_idx} => {
                 let current_scene = &mut app.scenes[*cur_scene_idx];                
@@ -240,9 +243,10 @@ impl Effect{
                 next_scene.active = true;
                 next_scene.clone().start(app);
                 app.current_scene = *next_scene_idx;
+                return true;
             },
             Effect::AutoNextScene{duration, cur_scene_idx, next_scene_idx} => {
-                if *duration < t.as_secs_f32() {
+                if *duration < t {
                     let current_scene = &mut app.scenes[*cur_scene_idx];                                     
                     current_scene.active = false;
                     current_scene.clone().stop(app);
@@ -250,16 +254,24 @@ impl Effect{
                     next_scene.active = true;
                     next_scene.clone().start(app);
                     app.current_scene = *next_scene_idx;
+                    return false;                
                 }
-                
+                return false;                
             },
             Effect::PlaySound{sound_index} => {
-                let s = app.sounds[*sound_index].clone();
+                let s = &mut app.sounds[*sound_index];
                 let _ = s.play();
+                return true;
             }
 
-        }
+        }        
     }
+}
+
+#[derive(Default)]
+struct EffectResult{
+    scene_changed : bool,
+    dead_effects  : Vec::<usize>
 }
 
 #[derive(Debug, Clone)]
@@ -299,13 +311,18 @@ impl Scene {
         }
     }
 
-    pub fn apply_effects(&self, app : &mut App, t : time::Duration ) ->bool{
+    pub fn apply_effects(&self, app : &mut App, t : f32 ) -> EffectResult{
         println!("apply_effects {}", self.name);
         let before_effect_scene = app.current_scene;
-        for eff in &self.effects{            
-            eff.apply(app, t);
+        let mut eff_result = EffectResult::default();
+        for (i, eff) in self.effects.iter().enumerate(){            
+            let to_remove = eff.apply(app, t);
+            if to_remove {
+                eff_result.dead_effects.push(i);
+            }
         }
-        app.current_scene != before_effect_scene 
+        eff_result.scene_changed = app.current_scene != before_effect_scene ;
+        eff_result
     }
 }
 
@@ -319,7 +336,8 @@ struct App {
     camera: Camera,
     world : World,    
     started: bool,
-    current_scene : usize    
+    current_scene : usize ,  
+    last_scene_change: f32
 }
 
 impl App {
@@ -341,7 +359,8 @@ impl App {
             camera : Camera{ actor_idx : 0 },
             world  : World{ size: [3000.0, 640.0]},            
             started : false,
-            current_scene : 0
+            current_scene : 0,
+            last_scene_change : 0.0
         }
 
 
@@ -404,7 +423,7 @@ impl App {
                 
     }
 
-    fn add_foreground_rects(&mut self, scene_idx: usize, sound_path : String){
+    fn add_foreground_rects(&mut self, scene_idx: usize, eff : Effect){
         
         const MAX_SIZE : f64 = 50.0;
         let actor_len = self.actors.len();
@@ -439,23 +458,32 @@ impl App {
         
     }
 
-    fn add_end_rects(&mut self, scene_idx: usize) -> usize{
+    fn add_end_rects(&mut self, exit_size : f64, scene_idx: usize) -> [usize; 3]{
         
+        let lose_rect_height = (self.world.size[1] / 2.0) - exit_size;
 
-        let mut a = Actor::new(ActorType::EndGame);
-        a.transform = Position{ x:self.world.size[0] as f32, y:0 as f32};
-        let size = Size{ x:50 as f32, y:self.world.size[1] as f32};
-        a.collision = Collision::RectCollision { width: size.x, height: size.y };
-        a.drawable = RectDraw::DynamicRect {
-            color   : RED,
-            size    : size,
-        };
+        let mut res : [usize; 3] = [0,0,0];
 
-        self.actors.push(a);
-        let s = &mut self.scenes[scene_idx];
-        let end_idx = self.actors.len() -1;
-        s.actors.push(end_idx);   
-        end_idx        
+        let mut yy = 0.0;
+        for (i, rect_height) in [lose_rect_height, exit_size, lose_rect_height].iter().enumerate() {
+            let mut a = Actor::new(ActorType::EndGame);
+            a.transform = Position{ x:self.world.size[0] as f32, y:yy as f32};
+            let size = Size{ x:50 as f32, y:*rect_height as f32 };
+            a.collision = Collision::RectCollision { width: size.x, height: size.y };
+            a.drawable = RectDraw::DynamicRect {
+                color   : RED,
+                size    : size,
+            };
+
+            self.actors.push(a);
+            let s = &mut self.scenes[scene_idx];
+            let end_idx = self.actors.len() -1;
+            s.actors.push(end_idx);   
+            yy += rect_height;
+            res[i] = end_idx;
+        }
+        
+        res 
     }
 
     fn add_background_rects(&mut self, ctx : &mut Context, scene_idx: usize){
@@ -529,13 +557,22 @@ impl EventHandler for App {
             s.start(self);                 
             let s = &mut self.scenes[self.current_scene];
             s.active = true;
-            self.started = true;       
+            self.started = true;  
+            self.last_scene_change = 0.0;     
         }
 
-        let t = timer::time_since_start(_ctx);
-        let s = self.scenes[self.current_scene].clone();
-        let scene_changed = s.apply_effects(self, t);
-        if scene_changed{
+
+        let original_scene = self.current_scene;
+        let t = timer::time_since_start(_ctx).as_secs_f32() - self.last_scene_change;
+        let s = self.scenes[original_scene].clone();
+        let eff_result = s.apply_effects(self, t);
+
+        let s = &mut self.scenes[original_scene];
+        for i in eff_result.dead_effects.iter().rev(){
+            s.effects.remove(*i);
+        }
+        if eff_result.scene_changed{
+            self.last_scene_change += t;
             return Ok(());
         }
 
@@ -768,11 +805,27 @@ fn main() {
         s.effects.push( Effect::ProcessInput );     
         s.effects.push( Effect::UpdateScore{actor_idx:text_idx});
     }
-    let end_game_idx = app.add_end_rects(play_scene_idx);
+    let [lose_rect1_idx, win_rect_idx, lose_rect2_idx]  = app.add_end_rects(50.0, play_scene_idx);
+    {
+        let a = &mut app.actors[win_rect_idx];   
+        if let RectDraw::DynamicRect{ref mut color, ..} = a.drawable {
+            *color = GREY;
+        }         
+    }
 
-    let end_scene_idx = app.create_scene("end".to_string());
+    let lose_scene_idx = app.create_scene("Game Over".to_string());
     {        
-        app.add_text("End Game".to_string(), 28.0, center, true, end_scene_idx);
+        app.add_text("Game Over".to_string(), 28.0, center, true, lose_scene_idx);
+        let s = &mut app.scenes[lose_scene_idx];
+        let auto_transition = Effect::AutoNextScene{duration:3.0, cur_scene_idx : lose_scene_idx, next_scene_idx : intro_scene_idx};        
+        s.effects.push( auto_transition );
+    }
+    let win_scene_idx = app.create_scene("Victory".to_string());
+    {        
+        app.add_text("Victory".to_string(), 28.0, center, true, win_scene_idx);
+        let s = &mut app.scenes[win_scene_idx];
+        let auto_transition = Effect::AutoNextScene{duration:3.0, cur_scene_idx : win_scene_idx, next_scene_idx : intro_scene_idx};        
+        s.effects.push( auto_transition );
     }
 
     {
@@ -781,9 +834,15 @@ fn main() {
         s.effects.push( auto_transition );
     }
     {
-        let a = &mut app.actors[end_game_idx];        
-        let end_game_transition = Effect::NextScene{cur_scene_idx : play_scene_idx, next_scene_idx : end_scene_idx};
-        a.col_resp.push(end_game_transition);        
+        let lose_game_transition = Effect::NextScene{cur_scene_idx : play_scene_idx, next_scene_idx : lose_scene_idx};
+        let a = &mut app.actors[lose_rect1_idx];                
+        a.col_resp.push(lose_game_transition);    
+        let a2 = &mut app.actors[lose_rect2_idx];                
+        a2.col_resp.push(lose_game_transition);        
+
+        let win_game_transition = Effect::NextScene{cur_scene_idx : play_scene_idx, next_scene_idx : win_scene_idx};
+        let a2 = &mut app.actors[win_rect_idx];                
+        a2.col_resp.push(win_game_transition);        
     }
           
 

@@ -37,4 +37,4 @@ ggez="*"
 cgmath = "*"
 mint = "*"
 find_folder = "*"
-
+uuid = { version = "0.8", features = ["serde", "v4"] }

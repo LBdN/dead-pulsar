@@ -3,6 +3,7 @@ extern crate find_folder;
 // use cgmath;
 use std::env;
 use std::path;
+use std::collections::HashMap;
 use rand;
 use rand::Rng;
 
@@ -13,153 +14,22 @@ use ggez::input::keyboard::KeyCode;
 use ggez::event::KeyMods;
 use ggez::graphics;
 use ggez::conf;
-use ggez::graphics::{DrawParam, Color, Rect, Drawable, DrawMode, Mesh};
+use ggez::graphics::{DrawParam,  Rect, Drawable, DrawMode, Mesh};
+use ggez::graphics::{Color};
 use ggez::timer;
 use ggez::audio;
 use ggez::audio::{SoundSource};
 
-use cgmath::{Point2};
+
+// use cgmath::{Point2};
 // use cgmath::prelude::*;
 
-type Position = mint::Point2::<f32>;
-type Size     = mint::Point2::<f32>;
-
-const GREY : Color = Color{ r: 0.5, g:0.5, b:0.5, a:1.0};
-const RED  : Color = Color{ r: 1.0, g:0.0, b:0.0, a:1.0};
-
-enum TextAnchor{
-    Center,
-    TopLeft
-}
-
-enum RectDraw{
-    NoDraw,
-    StaticRect(usize),
-    DynamicRect{ color : Color, size : mint::Point2::<f32>},
-    StaticText{text: graphics::Text, text_anchor: TextAnchor },
-    DynamicTextDraw { string: String, font : graphics::Font, fontsize : f32, color: graphics::Color},
-    
-}
-
-impl RectDraw {
-    fn draw(&self, transform : Position, mb : &mut graphics::MeshBuilder, meshes : &mut Vec::<Mesh>, ctx : &mut Context){
-        match self {
-            RectDraw::NoDraw => (),
-            RectDraw::StaticRect(idx) => {
-                let _ = meshes[*idx].draw(ctx, DrawParam::default().dest(transform));    
-            },
-            RectDraw::DynamicRect{color, size} => {
-                mb.rectangle(
-                    DrawMode::fill(),
-                    Rect {
-                        x:transform.x,
-                        y:transform.y,
-                        w:size.x,
-                        h:size.y
-                    },
-                    *color,
-                );
-            },
-            RectDraw::StaticText{text, text_anchor} =>{
-                let mut t =  transform.clone();
-                if let TextAnchor::Center = text_anchor {
-                    t.x -= text.width(ctx) as f32 / 2.0;
-                    t.y -= text.height(ctx) as f32;
-                }                
-                let _ = text.draw(ctx, DrawParam::default().dest(t));
-            },                        
-            RectDraw::DynamicTextDraw{string, font, fontsize, color} => {
-                let text = graphics::Text::new( (string.clone() , *font, *fontsize) );                
-                let t =  transform.clone();
-                // t.x -= text.width(ctx) as f32 / 2.0;
-                // t.y -= text.height(ctx) as f32 / 2.0;
-                let _ = text.draw(ctx, DrawParam::default().dest(t).color(*color));
-            }            
-        } 
-    }
-}
-
-#[derive(Copy, Clone, PartialEq)]
-enum DrawContext{
-    WorldSpace,
-    ScreenSpace
-}
-
-#[derive(Debug, Copy, Clone)]
-enum Collision{
-    NoCollision,
-    RectCollision{ width : f32, height : f32},
-    DiscCollision( f32)
-}
-
-impl Collision {
-    fn get_size(&self) -> Size {
-        match self {
-            Collision::RectCollision{width, height} => Size{x:*width, y:*height},
-            Collision::DiscCollision(radius) => Size{x:*radius, y:*radius},
-            Collision::NoCollision => Size{x:0.0, y:0.0}
-        }
-    }
-}
-
-fn collides( pos1 : &Position, col1 : &Collision, pos2 : &Position, col2 : &Collision) -> bool {
-    let v1 = Point2::<f32>{x : pos1.x ,y : pos1.y };
-    let v2 = Point2::<f32>{x : pos2.x ,y : pos2.y };
-    let delta = v2-v1;
-
-    match (col1, col2) {
-        ( Collision::RectCollision{width : width1, height:height1}, Collision::RectCollision{width : width2, height:height2}) => {            
-            if delta.x.abs() > ((width1 + width2)/2.0)  {
-                return false
-            }
-            if delta.y.abs() > ((height1 + height2)/2.0) {
-                return false
-            }    
-            return true
-        },
-        _ => {
-            return false
-        }
-    }        
-}
-
-#[derive(PartialEq)]
-pub enum ActorType {
-    Background,
-    Foreground,
-    Player,
-    EndGame,
-    UI,
-    Camera
-}
-
-pub struct Actor {
-    transform  : Position,    
-    drawable   : RectDraw,
-    drawctx    : DrawContext,
-    collision  : Collision,
-    col_resp   : Vec::<Effect>,
-    ticking    : bool,
-    visible    : bool,
-    atype      : ActorType
-}
-
-
-
-impl Actor {
-    pub fn new(atype : ActorType) -> Actor {
-        Actor {
-            transform: Position{ x:0.0, y:0.0},
-            drawable : RectDraw::StaticRect(0),
-            drawctx  : DrawContext::WorldSpace,
-            collision: Collision::DiscCollision(0.0),
-            col_resp : Vec::<Effect>::new(),
-            ticking  : false,
-            visible  : false,
-            atype    : atype
-        }
-    }
-}
+mod unit;
+mod text;
+mod color;
+mod render;
+mod actors;
+mod level; 
 
 /// **********************************************************************
 /// The `InputState` is exactly what it sounds like, it just keeps track of
@@ -167,10 +37,10 @@ impl Actor {
 /// state-based and device-independent.
 /// **********************************************************************
 #[derive(Debug)]
-struct InputState {
-    xaxis: f32,
-    yaxis: f32,
-    fire: bool,
+pub struct InputState {
+    pub xaxis: f32,
+    pub yaxis: f32,
+    pub fire: bool,
 }
 
 impl Default for InputState {
@@ -199,13 +69,14 @@ pub struct World {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-enum Effect{
-    PlaceActor{actor_idx: usize, position: Position},    
-    MoveActor{actor_idx: usize, vector: Position},
+pub enum Effect{
+    PlaceActor{actor_idx: usize, position: unit::Position},    
+    MoveActor{actor_idx: usize, vector: unit::Position},
     UpdateScore{actor_idx: usize},
     SetScore{new_value : i32},
     ProcessInput,
     KillActor{actor_idx: usize},
+    ResetActor{actor_idx: usize},
     // NextScene{cur_scene_idx : usize, next_scene_idx : usize},
     AutoNextScene{ duration : f32, cur_scene_idx : usize, next_scene_idx : usize},
     PlaySound{sound_index : usize},
@@ -223,7 +94,7 @@ impl Effect{
             Effect::UpdateScore{actor_idx} => {
                 if let Some(pa) = app.player.as_mut(){                    
                     if let Some(label_actor) = app.actors.get_mut(*actor_idx){ 
-                        if let RectDraw::DynamicTextDraw{string, ..} = &mut label_actor.drawable{
+                        if let render::Renderable::DynamicTextDraw{string, ..} = &mut label_actor.drawable{
                             *string = format!( "Score: {}", pa.score);
                         }
                     }
@@ -252,14 +123,21 @@ impl Effect{
             },
             Effect::KillActor{actor_idx} => {
                 let a = &mut app.actors[*actor_idx];
-                if let RectDraw::DynamicRect{ref mut color, ..} = a.drawable {
-                    *color = RED;
-                } 
-                a.collision = Collision::NoCollision;                                       
+                if let render::Renderable::DynamicRect{ref mut color, ..} = a.drawable {
+                    *color = color::GREEN;
+                }                 
                 a.ticking = false;                
                 return true;
             },
-
+            Effect::ResetActor{actor_idx} => {
+                let a = &mut app.actors[*actor_idx];
+                if let render::Renderable::DynamicRect{ref mut color, ..} = a.drawable {
+                    *color = color::random_foreground_color();
+                } 
+                
+                a.ticking = true;                
+                false
+            }
             Effect::AutoNextScene{duration, cur_scene_idx, next_scene_idx} => {
                 if *duration < t {
                     let current_scene = & app.scenes[*cur_scene_idx];                                     
@@ -288,6 +166,18 @@ impl Effect{
             }
 
         }        
+    }
+
+    pub fn update_state(&mut self){
+
+    }
+
+    pub fn on_actor(&self, actor : &mut actors::Actor, ctx: &Context, input : &InputState) -> Option::<level::WorldChange>{
+        // level::WorldChange {
+        //     score: 0,
+        //     level: None
+        // }
+        None
     }
 }
 
@@ -354,10 +244,10 @@ impl Scene {
     }
 }
 
-struct App {
-    font  : graphics::Font,    
+pub struct App {
+    fonts  : HashMap::<String, graphics::Font>,    
     scenes: Vec::<Scene>, 
-    actors: Vec::<Actor>,
+    actors: Vec::<actors::Actor>,
     meshes: Vec::<Mesh>,
     sounds: Vec::<audio::Source>,
     player: Option<Player>,
@@ -374,13 +264,19 @@ impl App {
         // let assets = find_folder::Search::ParentsThenKids(3, 3).for_folder("res").unwrap();
         // let fp     = assets.join("FiraMono-Bold.ttf");
 
+        let mut fonts = HashMap::<String, graphics::Font>::new();
+        fonts.insert("edundot".to_string(), graphics::Font::new(ctx, "/font/edundot.ttf").unwrap());
+        fonts.insert("Pixeled".to_string(), graphics::Font::new(ctx, "/font/Pixeled.ttf").unwrap());        
+        fonts.insert("FORCED SQUARE".to_string(), graphics::Font::new(ctx, "/font/FORCED SQUARE.ttf").unwrap());        
+        fonts.insert("V5PRD___".to_string(), graphics::Font::new(ctx, "/font/V5PRD___.TTF").unwrap());        
+
         
-        let font = graphics::Font::new(ctx, "/font/edundot.ttf").unwrap();
+        
 
         App {
-            font   : font,            
+            fonts  : fonts,            
             scenes : Vec::<Scene>::new(), 
-            actors : Vec::<Actor>::new(),
+            actors : Vec::<actors::Actor>::new(),
             meshes : Vec::<Mesh>::new(),
             sounds : Vec::<audio::Source>::new(),
             player : None,
@@ -444,7 +340,7 @@ impl App {
             let mut eff_to_remove = Vec::<usize>::new();
             for actor_idx in &s.actors{
                 let a = &self.actors[*actor_idx];
-                for eff in &a.col_resp{
+                for eff in &a.on_collision{
                     for (i, eff2) in s.effects.iter().enumerate(){
                         if *eff == *eff2 && !eff_to_remove.contains(&i) {
                              eff_to_remove.push(i);
@@ -474,34 +370,22 @@ impl App {
     }
 
     fn add_camera(&mut self, scene_idx: usize) ->usize {
-        let mut a = Actor::new(ActorType::Camera);
-        a.drawable  = RectDraw::NoDraw;
-        a.collision = Collision::NoCollision;
-        a.transform = Position{ x:0 as f32, y:0 as f32};
-        self.actors.push(a);
-
-        let s = &mut self.scenes[scene_idx];
-        let actor_idx = self.actors.len() -1;
-        s.actors.push(actor_idx);   
-
-        self.camera.actor_idx = actor_idx;
-        return actor_idx;
+        let mut a = actors::Actor::new(actors::ActorType::Camera, unit::get_id());
+        a.drawable  = render::Renderable::NoDraw;
+        a.collision = actors::Collision::NoCollision;
+        a.transform = unit::Position{ x:0 as f32, y:0 as f32};
+        
+        self.camera.actor_idx = self.add_actor(a, scene_idx);
+        return self.camera.actor_idx;
     }
 
     fn add_player(&mut self, scene_idx: usize) ->usize {
         
+        let size  = unit::Size{x:10.0, y:10.0};
         
-        let mut a = Actor::new(ActorType::Player);
+        let mut a = actors::Actor::new(actors::ActorType::Player, unit::get_id());
+        self.rect_behavior(&mut a, size, color::RED);
 
-        let size : f32 = 10.0;
-
-        a.drawable = RectDraw::DynamicRect {
-            color   : RED,
-            size    : Size{ x:size, y:size},
-        };
-
-        a.collision = Collision::RectCollision { width: size, height: size };
-        
         let actor_idx = self.add_actor(a, scene_idx);
         
         self.player = Some( Player{
@@ -513,31 +397,37 @@ impl App {
         actor_idx
     }
 
+    fn random_rect(&self, maxsize : f32) -> (f32, f32, unit::Size) {
+        let mut rng = rand::thread_rng();
+        let x    = rng.gen_range(0.0, self.world.size[0]) as f32;
+        let y    = rng.gen_range(0.0, self.world.size[1]) as f32;
+        let size = rng.gen_range(0.0, maxsize) as f32;            
+        (x, y, unit::Size{x:size, y:size})
+    }
+
+    fn rect_behavior(&mut self, a : &mut actors::Actor, size: unit::Size, color : Color){
+        a.drawable = render::Renderable::DynamicRect {
+            color   : color,
+            size    : size,
+        };            
+        a.collision = actors::Collision::RectCollision { width: size.x, height: size.y };
+    }
+
     fn add_foreground_rects(&mut self, scene_idx: usize, eff : Effect) -> [usize; 100]{
         
-        const MAX_SIZE : f64 = 50.0;
+        const MAX_SIZE : f32 = 50.0;
         let actor_len = self.actors.len();
         let mut indices : [usize; 100] = [0;100];
         for i in 1..100 {
-            let mut a = Actor::new(ActorType::Foreground);
+            let mut a = actors::Actor::new(actors::ActorType::Foreground, unit::get_id());
+  
+            let (x, y, size) = self.random_rect(MAX_SIZE);
 
-            let mut rng = rand::thread_rng();
-            let x    = rng.gen_range(0.0, self.world.size[0]) as f32;
-            let y    = rng.gen_range(0.0, self.world.size[1]) as f32;
-            let size = rng.gen_range(0.0, MAX_SIZE) as f32;
-            let r    = 1.0;
-            let b    = rng.gen_range(0.0, 1.0);
+            a.transform = unit::Position{ x:x, y:y};
+            self.rect_behavior(&mut a, size, color::random_foreground_color());
 
-            a.transform = Position{ x:x, y:y};
-
-            a.drawable = RectDraw::DynamicRect {
-                color   : Color{r:r, g:r, b:b, a:1.0},
-                size    : Size{ x:size, y:size},
-            };            
-
-            a.collision = Collision::RectCollision { width: size, height: size };
-            a.col_resp.push( Effect::KillActor{actor_idx:i+actor_len-1});
-            a.col_resp.push( eff);            
+            a.on_collision.push( Effect::KillActor{actor_idx:i+actor_len-1});
+            a.on_collision.push( eff);            
 
             indices[i] = self.add_actor(a, scene_idx);            
         }
@@ -546,27 +436,20 @@ impl App {
 
     fn add_end_rects(&mut self, exit_size : f64, scene_idx: usize) -> [usize; 3]{
         
-        let lose_rect_height = (self.world.size[1] / 2.0) - exit_size;
+        let lose_rect_height = (self.world.size[1]- exit_size) / 2.0;
 
         let mut res : [usize; 3] = [0,0,0];
 
         let mut yy = 0.0;
         for (i, rect_height) in [lose_rect_height, exit_size, lose_rect_height].iter().enumerate() {
-            let mut a = Actor::new(ActorType::EndGame);
-            a.transform = Position{ x:self.world.size[0] as f32, y:yy as f32};
-            let size = Size{ x:50 as f32, y:*rect_height as f32 };
-            a.collision = Collision::RectCollision { width: size.x, height: size.y };
-            a.drawable = RectDraw::DynamicRect {
-                color   : RED,
-                size    : size,
-            };
+            let mut a = actors::Actor::new(actors::ActorType::EndGame, unit::get_id());
+            a.transform = unit::Position{ x:self.world.size[0] as f32, y:yy as f32};
+            let size = unit::Size{ x:50 as f32, y:*rect_height as f32 };
 
-            self.actors.push(a);
-            let s = &mut self.scenes[scene_idx];
-            let end_idx = self.actors.len() -1;
-            s.actors.push(end_idx);   
+            self.rect_behavior(&mut a, size, color::RED);            
+
             yy += rect_height;
-            res[i] = end_idx;
+            res[i] = self.add_actor(a, scene_idx);
         }
         
         res 
@@ -574,48 +457,44 @@ impl App {
 
     fn add_background_rects(&mut self, ctx : &mut Context, scene_idx: usize) -> usize{
         
-        const MAX_SIZE : f64 = 50.0;
+        const MAX_SIZE : f32 = 50.0;
+        
+
+        let mut a = actors::Actor::new(actors::ActorType::Background, unit::get_id());
+
         let mut mb = graphics::MeshBuilder::new();
-
-        let mut a = Actor::new(ActorType::Background);
-
         for _i in 1..10000 {
-            let mut rng = rand::thread_rng();
-            let x    = rng.gen_range(0.0, self.world.size[0]);
-            let y    = rng.gen_range(0.0, self.world.size[1]);
-            let size = rng.gen_range(0.0, MAX_SIZE);
-            let r    = rng.gen_range(0.1, 0.5);
+            let (x, y, size) = self.random_rect(MAX_SIZE);            
 
             mb.rectangle(
                 DrawMode::fill(),
-                Rect {x:x as f32, y:y as f32, w:size as f32, h:size as f32},
-                Color{r:r, g:r, b:r, a:1.0}
+                Rect {x:x, y:y, w:size.x, h:size.y},
+                color::random_grey_color()
             );
-
         }
-
         let mesh = mb.build(ctx).unwrap();
+
         self.meshes.push(mesh);
-        a.drawable = RectDraw::StaticRect( self.meshes.len() - 1);
+        a.drawable = render::Renderable::StaticRect( self.meshes.len() - 1);
 
         self.add_actor(a, scene_idx)
     }
 
-    fn add_text(&mut self, text: String, fontsize: f32, pos: Position, static_:bool, scene_idx: usize, centered: bool) -> usize{
-        let mut a   = Actor::new(ActorType::UI);
-        a.drawctx   = DrawContext::ScreenSpace;
-        let gtext   = graphics::Text::new((text.clone(), self.font, fontsize));        
+    fn add_text(&mut self, text: String, fontsize: f32, fontname: String, static_:bool, scene_idx: usize, centered: bool) -> usize{
+        let mut a   = actors::Actor::new(actors::ActorType::UI, unit::get_id());
+        a.drawctx   = actors::DrawContext::ScreenSpace;
+        let font    = self.fonts[&fontname];
+        let gtext   = graphics::Text::new((text.clone(), font, fontsize));        
         if static_{                        
-            let text_anchor = if centered  {TextAnchor::Center} else {TextAnchor::TopLeft};
-            a.drawable  = RectDraw::StaticText{ text: gtext, text_anchor : text_anchor };            
+            let text_anchor = if centered  {render::TextAnchor::Center} else {render::TextAnchor::TopLeft};
+            a.drawable  = render::Renderable::StaticText{ text: gtext, text_anchor : text_anchor };            
         } else {
-            a.drawable = RectDraw::DynamicTextDraw{ string: text, font : self.font, fontsize : fontsize, color: graphics::WHITE};
-        }
-        a.transform = pos;
+            a.drawable = render::Renderable::DynamicTextDraw{ string: text, font : font, fontsize : fontsize, color: graphics::WHITE};
+        }        
         self.add_actor(a, scene_idx)
     }
 
-    fn add_actor(&mut self, a: Actor, scene_idx: usize) -> usize {
+    fn add_actor(&mut self, a: actors::Actor, scene_idx: usize) -> usize {
         self.actors.push(a);
         let s = &mut self.scenes[scene_idx];
         let actor_idx = self.actors.len() -1;
@@ -626,7 +505,7 @@ impl App {
 
 }
 
-fn player_handle_input(p: &Player, pa : &mut Actor) {
+fn player_handle_input(p: &Player, pa : &mut actors::Actor) {
 
     const MOVE_STEP : f32 = -10.0;    
     
@@ -657,11 +536,11 @@ impl EventHandler for App {
         
         
         if let Some(pa) = self.player.as_mut(){                        
-            let mut pos1       = Position{x : 0.0, y: 0.0};
-            let mut collision1 = Collision::DiscCollision(0.0);
+            let mut pos1       = unit::Position{x : 0.0, y: 0.0};
+            let mut collision1 = actors::Collision::DiscCollision(0.0);
             if let Some(player_actor) = self.actors.get(pa.actor_idx){                
                 let size1  = player_actor.collision.get_size();
-                pos1       = Position{x : player_actor.transform.x + size1.x/2.0,y : player_actor.transform.y + size1.y/2.0};
+                pos1       = unit::Position{x : player_actor.transform.x + size1.x/2.0,y : player_actor.transform.y + size1.y/2.0};
                 collision1 = player_actor.collision;
             }
                          
@@ -669,27 +548,23 @@ impl EventHandler for App {
                 if !a.ticking{
                     continue;
                 }
-                if let ActorType::Background = a.atype {
+                if let actors::ActorType::Background = a.atype {
                     continue;
                 }
-                if let ActorType::Player = a.atype {
+                if let actors::ActorType::Player = a.atype {
                     continue;
                 }
-                if let Collision::NoCollision = a.collision {
+                if let actors::Collision::NoCollision = a.collision {
                     continue;
                 }                    
 
                 let size2 = a.collision.get_size();                    
-                let pos2 = Position{x : a.transform.x + size2.x/2.0,y : a.transform.y + size2.y/2.0};
+                let pos2 = unit::Position{x : a.transform.x + size2.x/2.0,y : a.transform.y + size2.y/2.0};
                 
-                if collides(&pos1, &collision1, &pos2, &a.collision){
-                    // if let RectDraw::DynamicRect{ref mut color, ..} = a.drawable {
-                    //     *color = RED;
-                    // }                        
+                if actors::collides(&pos1, &collision1, &pos2, &a.collision){      
                     pa.score += (1000.0 / (size2.x*size2.y)) as i32;
-                    // a.dead = true;
                     let s = &mut self.scenes[self.current_scene];
-                    s.effects.append(& mut a.col_resp.clone());
+                    s.effects.append(& mut a.on_collision.clone());
                 }
 
             }
@@ -711,7 +586,7 @@ impl EventHandler for App {
         // Draw code here...        
         let mut smtg_drawn = false;
 
-        let mut draw_ctx = DrawContext::WorldSpace;        
+        let mut draw_ctx = actors::DrawContext::WorldSpace;        
         let t = self.actors[self.camera.actor_idx].transform;
         let cam_transform = DrawParam::default().dest(t).to_matrix();
         graphics::push_transform(ctx, Some(cam_transform));
@@ -721,16 +596,16 @@ impl EventHandler for App {
             if !a.visible {
                 continue;
             }
-            if a.atype == ActorType::UI{
+            if a.atype == actors::ActorType::UI{
                 continue;
             }
 
             if draw_ctx != a.drawctx {
-                if let DrawContext::ScreenSpace = a.drawctx {
+                if let actors::DrawContext::ScreenSpace = a.drawctx {
                     graphics::pop_transform(ctx);
                     graphics::apply_transformations(ctx).unwrap();            
                 }
-                if let DrawContext::WorldSpace = a.drawctx{                    
+                if let actors::DrawContext::WorldSpace = a.drawctx{                    
                     graphics::push_transform(ctx, Some(cam_transform));
                     graphics::apply_transformations(ctx).unwrap();
                 }
@@ -738,7 +613,7 @@ impl EventHandler for App {
             }
 
             a.drawable.draw(a.transform, &mut mb, &mut self.meshes, ctx);
-            if let RectDraw::DynamicRect{color:_, size:_} = a.drawable{
+            if let render::Renderable::DynamicRect{color:_, size:_} = a.drawable{
                 smtg_drawn = true;
             }
             
@@ -752,23 +627,23 @@ impl EventHandler for App {
         }
         
 
-        let mut draw_ctx = DrawContext::WorldSpace;      
+        let mut draw_ctx = actors::DrawContext::WorldSpace;      
         graphics::pop_transform(ctx);
         graphics::apply_transformations(ctx).unwrap();           
         for a in &self.actors {
             if !a.visible {
                 continue;
             }
-            if a.atype != ActorType::UI{
+            if a.atype != actors::ActorType::UI{
                 continue;
             }
 
             if draw_ctx != a.drawctx {
-                if let DrawContext::ScreenSpace = a.drawctx {
+                if let actors::DrawContext::ScreenSpace = a.drawctx {
                     graphics::pop_transform(ctx);
                     graphics::apply_transformations(ctx).unwrap();            
                 }
-                if let DrawContext::WorldSpace = a.drawctx{                    
+                if let actors::DrawContext::WorldSpace = a.drawctx{                    
                     graphics::push_transform(ctx, Some(cam_transform));
                     graphics::apply_transformations(ctx).unwrap();
                 }
@@ -855,60 +730,82 @@ fn main() {
     // so it can load resources like images during setup.
     let mut app = App::new(&mut ctx);
 
-    let center = Position{x: 400.0, y: 300.0};
+    let center = unit::Position{x: 400.0, y: 300.0};
 
     let intro_scene_idx = app.create_scene("intro".to_string());    
-    app.add_text("Pulsar 3".to_string(), 56.0, center, true, intro_scene_idx, true);
+    let text_idx = app.add_text("Pulsar 3".to_string(), 56.0, "edundot".to_string(), true, intro_scene_idx, true);
+    let a = &mut app.actors[text_idx];
+    a.transform = center;
+
+    let tutorial_idx = app.create_scene("intro".to_string());    {
+        let tuto_text = "Catch the yellow blocks and\n exit with the green one.".to_string();
+        let text_idx = app.add_text(tuto_text, 30.0, "V5PRD___".to_string(), true, tutorial_idx, true);
+        let a = &mut app.actors[text_idx];
+        a.transform = center;
+    }
+    
 
     let play_scene_idx = app.create_scene("play".to_string());    
     {
         app.add_background_rects(& mut ctx, play_scene_idx);
         let sound_idx = app.add_sound("/Randomize6.wav".to_string(), &mut ctx);
         let eff = Effect::PlaySound{sound_index:sound_idx};
-        app.add_foreground_rects(play_scene_idx, eff);    
+        let actor_idxs       = app.add_foreground_rects(play_scene_idx, eff);    
         let player_actor_idx = app.add_player(play_scene_idx);
         let camera_idx       = app.add_camera(play_scene_idx);
-        let text_idx         = app.add_text("Pulsar 3".to_string(), 28.0, Position{x: 10.0, y: 10.0}, true, play_scene_idx, false);
+        let text_idx         = app.add_text("Pulsar 3".to_string(), 28.0, "edundot".to_string(), true, play_scene_idx, false);
+        let a = &mut app.actors[text_idx];
+        a.transform = unit::Position{x: 10.0, y: 10.0};
         
         let a = &app.actors[text_idx];        
         let margin = 10.0;
-        let mut p = Position{x:0.0+margin, y: 10.0};
-        if let RectDraw::StaticText{text, ..} = &a.drawable{            
-            p = Position{x:a.transform.x+text.width(&mut ctx) as f32 +margin, y: 10.0};        
+        let mut p = unit::Position{x:0.0+margin, y: 10.0};
+        if let render::Renderable::StaticText{text, ..} = &a.drawable{            
+            p = unit::Position{x:a.transform.x+text.width(&mut ctx) as f32 +margin, y: 10.0};        
         } 
-        let text_idx = app.add_text("Score: 0".to_string(), 28.0, p, false, play_scene_idx, false);
+        let text_idx = app.add_text("Score: 0".to_string(), 28.0, "edundot".to_string(), false, play_scene_idx, false);
+        let a = &mut app.actors[text_idx];
+        a.transform = p;
                 
         let s = &mut app.scenes[play_scene_idx];
-        s.effects.push( Effect::MoveActor{actor_idx:camera_idx,       vector:Position{x:-1.0, y:0.0}} );
-        s.effects.push( Effect::MoveActor{actor_idx:player_actor_idx, vector:Position{x :1.0, y:0.0}} );    
+        s.effects.push( Effect::MoveActor{actor_idx:camera_idx,       vector:unit::Position{x:-1.0, y:0.0}} );
+        s.effects.push( Effect::MoveActor{actor_idx:player_actor_idx, vector:unit::Position{x :1.0, y:0.0}} );    
         s.effects.push( Effect::ProcessInput );     
         s.effects.push( Effect::UpdateScore{actor_idx:text_idx});
 
         let mut p_pos = center.clone();
         p_pos.x = 10.0;
         s.start_effects.push( Effect::PlaceActor{actor_idx:player_actor_idx, position: p_pos} );
-        s.start_effects.push( Effect::PlaceActor{actor_idx:camera_idx, position:  Position{ x:0 as f32, y:0 as f32}} );
+        s.start_effects.push( Effect::PlaceActor{actor_idx:camera_idx, position:  unit::Position{ x:0 as f32, y:0 as f32}} );
         s.start_effects.push( Effect::SetScore{new_value : 0} );
+        for i in actor_idxs.iter() {
+            s.start_effects.push( Effect::ResetActor{actor_idx : *i} );
+        }
+        
         
     }
     let [lose_rect1_idx, win_rect_idx, lose_rect2_idx]  = app.add_end_rects(50.0, play_scene_idx);
     {
         let a = &mut app.actors[win_rect_idx];   
-        if let RectDraw::DynamicRect{ref mut color, ..} = a.drawable {
-            *color = GREY;
+        if let render::Renderable::DynamicRect{ref mut color, ..} = a.drawable {
+            *color = color::GREY;
         }         
     }
 
     let lose_scene_idx = app.create_scene("Game Over".to_string());
     {        
-        app.add_text("Game Over".to_string(), 28.0, center, true, lose_scene_idx, true);
+        let text_idx = app.add_text("Game Over".to_string(), 28.0, "edundot".to_string(), true, lose_scene_idx, true);
+        let a = &mut app.actors[text_idx];
+        a.transform = center;
         let s = &mut app.scenes[lose_scene_idx];
         let auto_transition = Effect::AutoNextScene{duration:3.0, cur_scene_idx : lose_scene_idx, next_scene_idx : intro_scene_idx};        
         s.effects.push( auto_transition );
     }
     let win_scene_idx = app.create_scene("Victory".to_string());
     {        
-        app.add_text("Victory".to_string(), 28.0, center, true, win_scene_idx, true);
+        let text_idx = app.add_text("Victory".to_string(), 28.0, "edundot".to_string(), true, win_scene_idx, true);
+        let a = &mut app.actors[text_idx];
+        a.transform = center;
         let s = &mut app.scenes[win_scene_idx];
         let auto_transition = Effect::AutoNextScene{duration:3.0, cur_scene_idx : win_scene_idx, next_scene_idx : intro_scene_idx};        
         s.effects.push( auto_transition );
@@ -916,19 +813,24 @@ fn main() {
 
     {
         let s = &mut app.scenes[intro_scene_idx];
-        let auto_transition = Effect::AutoNextScene{duration:3.0, cur_scene_idx : intro_scene_idx, next_scene_idx : play_scene_idx};        
+        let auto_transition = Effect::AutoNextScene{duration:3.0, cur_scene_idx : intro_scene_idx, next_scene_idx : tutorial_idx};        
+        s.effects.push( auto_transition );
+    }
+    {
+        let s = &mut app.scenes[tutorial_idx];
+        let auto_transition = Effect::AutoNextScene{duration:3.0, cur_scene_idx : tutorial_idx, next_scene_idx : play_scene_idx};        
         s.effects.push( auto_transition );
     }
     {
         let lose_game_transition = Effect::AutoNextScene{duration:0.0, cur_scene_idx : play_scene_idx, next_scene_idx : lose_scene_idx};
         let a = &mut app.actors[lose_rect1_idx];                
-        a.col_resp.push(lose_game_transition);    
+        a.on_collision.push(lose_game_transition);    
         let a2 = &mut app.actors[lose_rect2_idx];                
-        a2.col_resp.push(lose_game_transition);        
+        a2.on_collision.push(lose_game_transition);        
 
         let win_game_transition = Effect::AutoNextScene{duration:0.0, cur_scene_idx : play_scene_idx, next_scene_idx : win_scene_idx};
         let a2 = &mut app.actors[win_rect_idx];                
-        a2.col_resp.push(win_game_transition);        
+        a2.on_collision.push(win_game_transition);        
     }
           
 

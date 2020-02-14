@@ -1,4 +1,6 @@
+use ggez::graphics::{Color, WHITE};
 
+#[derive(Copy, Clone)]
 pub enum FontWeight{
     Light,
     LightItalic,
@@ -7,21 +9,23 @@ pub enum FontWeight{
     Bold,
     BoldItalic,
 }
-    
+
+#[derive(Clone)]
 pub struct FontStyle{
-    size  : usize,
-    name  : String,
-    weight: FontWeight,
-    color : [f32;3]
+    pub size  : f32,
+    pub name  : String,
+    pub weight: FontWeight,
+    pub color : Color
 }
+
 
 impl FontStyle{
     pub fn new() -> FontStyle{
         FontStyle{
-            size: 10,
+            size: 10.0,
             name: "".to_string(),
             weight: FontWeight::Normal,
-            color : [1.0, 1.0, 1.0]
+            color : WHITE
         }
     }
 }

@@ -244,8 +244,8 @@ impl Scene {
     }
 }
 
-pub struct App {
-    fonts  : HashMap::<String, graphics::Font>,    
+pub struct App {    
+    renderer : render::Renderer,
     scenes: Vec::<Scene>, 
     actors: Vec::<actors::Actor>,
     meshes: Vec::<Mesh>,
@@ -273,8 +273,8 @@ impl App {
         
         
 
-        App {
-            fonts  : fonts,            
+        let mut a = App {
+            renderer : render::Renderer::new(),
             scenes : Vec::<Scene>::new(), 
             actors : Vec::<actors::Actor>::new(),
             meshes : Vec::<Mesh>::new(),
@@ -285,10 +285,10 @@ impl App {
             started : false,
             current_scene : 0,
             last_scene_change : 0.0
-        }
+        };
 
-
-        
+        a.renderer.fonts = fonts;
+        a
     }
 
     fn start(&mut self){
@@ -474,22 +474,22 @@ impl App {
         }
         let mesh = mb.build(ctx).unwrap();
 
-        self.meshes.push(mesh);
-        a.drawable = render::Renderable::StaticRect( self.meshes.len() - 1);
+        self.renderer.meshes.push(mesh);
+        a.drawable = render::Renderable::StaticRect( self.renderer.meshes.len() - 1);
 
         self.add_actor(a, scene_idx)
     }
 
-    fn add_text(&mut self, text: String, fontsize: f32, fontname: String, static_:bool, scene_idx: usize, centered: bool) -> usize{
+    fn add_text(&mut self, text: String, fontstyle : text::FontStyle, static_:bool, scene_idx: usize, centered: bool) -> usize{
         let mut a   = actors::Actor::new(actors::ActorType::UI, unit::get_id());
         a.drawctx   = actors::DrawContext::ScreenSpace;
-        let font    = self.fonts[&fontname];
-        let gtext   = graphics::Text::new((text.clone(), font, fontsize));        
+        let font    = self.renderer.fonts[&fontstyle.name];
+        let gtext   = graphics::Text::new((text.clone(), font, fontstyle.size));        
         if static_{                        
             let text_anchor = if centered  {render::TextAnchor::Center} else {render::TextAnchor::TopLeft};
             a.drawable  = render::Renderable::StaticText{ text: gtext, text_anchor : text_anchor };            
         } else {
-            a.drawable = render::Renderable::DynamicTextDraw{ string: text, font : font, fontsize : fontsize, color: graphics::WHITE};
+            a.drawable = render::Renderable::DynamicTextDraw{ string: text, fontstyle : fontstyle};
         }        
         self.add_actor(a, scene_idx)
     }
@@ -577,20 +577,16 @@ impl EventHandler for App {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
-        graphics::clear(ctx, graphics::BLACK);
 
-        
-
-        let mut mb = graphics::MeshBuilder::new();
-        
+        let t = self.actors[self.camera.actor_idx].transform;
+        self.renderer.start_frame(ctx, t);
+            
+        self.renderer.start_batch();
+            
         // Draw code here...        
         let mut smtg_drawn = false;
-
         let mut draw_ctx = actors::DrawContext::WorldSpace;        
-        let t = self.actors[self.camera.actor_idx].transform;
-        let cam_transform = DrawParam::default().dest(t).to_matrix();
-        graphics::push_transform(ctx, Some(cam_transform));
-        graphics::apply_transformations(ctx).unwrap();
+        self.renderer.push_cam_transform(ctx);
 
         for a in &self.actors {
             if !a.visible {
@@ -601,35 +597,28 @@ impl EventHandler for App {
             }
 
             if draw_ctx != a.drawctx {
-                if let actors::DrawContext::ScreenSpace = a.drawctx {
-                    graphics::pop_transform(ctx);
-                    graphics::apply_transformations(ctx).unwrap();            
+                if let actors::DrawContext::ScreenSpace = a.drawctx {                    
+                    self.renderer.pop_cam_transform(ctx);
                 }
-                if let actors::DrawContext::WorldSpace = a.drawctx{                    
-                    graphics::push_transform(ctx, Some(cam_transform));
-                    graphics::apply_transformations(ctx).unwrap();
+                if let actors::DrawContext::WorldSpace = a.drawctx{                                        
+                    self.renderer.push_cam_transform(ctx);
                 }
                 draw_ctx = a.drawctx;
             }
-
-            a.drawable.draw(a.transform, &mut mb, &mut self.meshes, ctx);
+            a.drawable.draw(a.transform, &mut self.renderer, ctx);
             if let render::Renderable::DynamicRect{color:_, size:_} = a.drawable{
                 smtg_drawn = true;
             }
             
         }    
         if smtg_drawn == true{
-            // let transform = DrawParam::default().dest(self.cam_transform).to_matrix();
-            graphics::push_transform(ctx, Some(cam_transform));
-            graphics::apply_transformations(ctx).unwrap();
-            let mesh = mb.build(ctx).unwrap();
-            mesh.draw(ctx, DrawParam::default().dest([0.0,0.0])).unwrap();
+            self.renderer.push_cam_transform(ctx);            
+            self.renderer.end_batch(ctx);            
         }
         
 
-        let mut draw_ctx = actors::DrawContext::WorldSpace;      
-        graphics::pop_transform(ctx);
-        graphics::apply_transformations(ctx).unwrap();           
+        let mut draw_ctx = actors::DrawContext::WorldSpace;              
+        self.renderer.pop_cam_transform(ctx);
         for a in &self.actors {
             if !a.visible {
                 continue;
@@ -639,21 +628,18 @@ impl EventHandler for App {
             }
 
             if draw_ctx != a.drawctx {
-                if let actors::DrawContext::ScreenSpace = a.drawctx {
-                    graphics::pop_transform(ctx);
-                    graphics::apply_transformations(ctx).unwrap();            
+                if let actors::DrawContext::ScreenSpace = a.drawctx {                    
+                    self.renderer.pop_cam_transform(ctx);                                
                 }
-                if let actors::DrawContext::WorldSpace = a.drawctx{                    
-                    graphics::push_transform(ctx, Some(cam_transform));
-                    graphics::apply_transformations(ctx).unwrap();
+                if let actors::DrawContext::WorldSpace = a.drawctx{                                        
+                    self.renderer.push_cam_transform(ctx);
                 }
                 draw_ctx = a.drawctx;
             }
-
-            a.drawable.draw(a.transform, &mut mb, &mut self.meshes, ctx);                        
+            a.drawable.draw(a.transform, &mut self.renderer, ctx);                        
         }    
 
-        graphics::present(ctx)
+        self.renderer.end_frame(ctx)
     }
 
 
@@ -731,15 +717,35 @@ fn main() {
     let mut app = App::new(&mut ctx);
 
     let center = unit::Position{x: 400.0, y: 300.0};
+    let title_style = text::FontStyle{
+        size: 56.0,
+        name: "edundot".to_string(),
+        weight: text::FontWeight::Normal,
+        color: ggez::graphics::WHITE,
+    };
+
+    let tuto_style = text::FontStyle{
+        size: 30.0,
+        name: "V5PRD___".to_string(),
+        weight: text::FontWeight::Normal,
+        color: ggez::graphics::WHITE,
+    };
+
+    let ui_style = text::FontStyle{
+        size: 28.0,
+        name: "edundot".to_string(),
+        weight: text::FontWeight::Normal,
+        color: ggez::graphics::WHITE,
+    };
 
     let intro_scene_idx = app.create_scene("intro".to_string());    
-    let text_idx = app.add_text("Pulsar 3".to_string(), 56.0, "edundot".to_string(), true, intro_scene_idx, true);
+    let text_idx = app.add_text("Pulsar 3".to_string(), title_style.clone(), true, intro_scene_idx, true);
     let a = &mut app.actors[text_idx];
     a.transform = center;
 
     let tutorial_idx = app.create_scene("intro".to_string());    {
         let tuto_text = "Catch the yellow blocks and\n exit with the green one.".to_string();
-        let text_idx = app.add_text(tuto_text, 30.0, "V5PRD___".to_string(), true, tutorial_idx, true);
+        let text_idx = app.add_text(tuto_text, tuto_style.clone(), true, tutorial_idx, true);
         let a = &mut app.actors[text_idx];
         a.transform = center;
     }
@@ -753,7 +759,7 @@ fn main() {
         let actor_idxs       = app.add_foreground_rects(play_scene_idx, eff);    
         let player_actor_idx = app.add_player(play_scene_idx);
         let camera_idx       = app.add_camera(play_scene_idx);
-        let text_idx         = app.add_text("Pulsar 3".to_string(), 28.0, "edundot".to_string(), true, play_scene_idx, false);
+        let text_idx         = app.add_text("Pulsar 3".to_string(), ui_style.clone(), true, play_scene_idx, false);
         let a = &mut app.actors[text_idx];
         a.transform = unit::Position{x: 10.0, y: 10.0};
         
@@ -763,7 +769,7 @@ fn main() {
         if let render::Renderable::StaticText{text, ..} = &a.drawable{            
             p = unit::Position{x:a.transform.x+text.width(&mut ctx) as f32 +margin, y: 10.0};        
         } 
-        let text_idx = app.add_text("Score: 0".to_string(), 28.0, "edundot".to_string(), false, play_scene_idx, false);
+        let text_idx = app.add_text("Score: 0".to_string(), ui_style.clone(), false, play_scene_idx, false);
         let a = &mut app.actors[text_idx];
         a.transform = p;
                 
@@ -794,7 +800,7 @@ fn main() {
 
     let lose_scene_idx = app.create_scene("Game Over".to_string());
     {        
-        let text_idx = app.add_text("Game Over".to_string(), 28.0, "edundot".to_string(), true, lose_scene_idx, true);
+        let text_idx = app.add_text("Game Over".to_string(), title_style.clone(), true, lose_scene_idx, true);
         let a = &mut app.actors[text_idx];
         a.transform = center;
         let s = &mut app.scenes[lose_scene_idx];
@@ -803,7 +809,7 @@ fn main() {
     }
     let win_scene_idx = app.create_scene("Victory".to_string());
     {        
-        let text_idx = app.add_text("Victory".to_string(), 28.0, "edundot".to_string(), true, win_scene_idx, true);
+        let text_idx = app.add_text("Victory".to_string(), title_style.clone(), true, win_scene_idx, true);
         let a = &mut app.actors[text_idx];
         a.transform = center;
         let s = &mut app.scenes[win_scene_idx];

@@ -1,5 +1,16 @@
 use std::collections::HashMap;
 use ggez::{Context};
+use ggez::graphics::{Color};
+use rand::Rng;
+
+
+fn random_rect(maxsize : f32, world_size : &super::unit::Size) -> (f32, f32, super::unit::Size) {
+    let mut rng = rand::thread_rng();
+    let x    = rng.gen_range(0.0, world_size.x) as f32;
+    let y    = rng.gen_range(0.0, world_size.y) as f32;
+    let size = rng.gen_range(0.0, maxsize) as f32;            
+    (x, y, super::unit::Size{x:size, y:size})
+}
 
 pub struct WorldChange{
     pub score : u32,
@@ -11,11 +22,14 @@ type KeyedEffects = HashMap<super::unit::Id, Vec::<super::Effect>>;
 struct World{
     start_effects : KeyedEffects,
     effects       : KeyedEffects,
-    actors        : Vec::<super::actors::Actor>,    
+    actors        : Vec::<super::actors::Actor>,        
+    player_atr_id : super::unit::Id,
+    camera_atr_id : super::unit::Id,
+    //
     active        : bool,
     name          : String,
-    player_atr_id : super::unit::Id,
-    camera_atr_id : super::unit::Id
+    size          : super::unit::Size
+
 }
 
 impl World{
@@ -24,10 +38,12 @@ impl World{
             start_effects : KeyedEffects::new(),
             effects       : KeyedEffects::new(),
             actors        : Vec::<super::actors::Actor>::new(),    
+            player_atr_id : super::unit::get_id(),
+            camera_atr_id : super::unit::get_id(),
             active        : false,
             name          : name,
-            player_atr_id : super::unit::get_id(),
-            camera_atr_id :super::unit::get_id()
+            size          :super::unit::Size{x:0.0, y:0.0}
+            
         }
     }
 
@@ -124,13 +140,77 @@ impl WorldBuilder{
         WorldBuilder { w : World::new(name)}
     }
 
-    fn add_background_rect(){
-
+    fn add_effect_to_actor(&mut self, a : &super::actors::Actor, eff : super::Effect, start : bool ){
+        let opt_effs = if start { self.w.start_effects.get_mut(&a.id) } 
+                       else { self.w.effects.get_mut(&a.id) };            
+        if let Some(effs) = opt_effs {
+            effs.push(eff);
+        }                    
     }
 
-    fn add_actor_rect(){
-
+    fn add_rect_to_actor(&mut self, a : &mut super::actors::Actor, size: super::unit::Size, color : Color){
+        a.drawable = super::render::Renderable::DynamicRect {
+            color   : color,
+            size    : size,
+        };            
+        a.collision = super::actors::Collision::RectCollision { width: size.x, height: size.y };
     }
+
+    fn add_rect_type(&mut self, mut a :  super::actors::Actor, MAX_SIZE : f32) -> super::unit::Id {
+        let (x, y, size) = random_rect(MAX_SIZE, &self.w.size);
+
+        a.transform = super::unit::Position{ x:x, y:y};
+        self.add_rect_to_actor(&mut a, size, super::color::random_foreground_color());
+        let atr_id = a.id.clone();
+        self.w.actors.push(a);        
+        atr_id
+    }
+
+    //
+
+    fn add_player(&mut self) -> super::unit::Id {        
+        let size  = super::unit::Size{x:10.0, y:10.0};        
+        let mut a = super::actors::Actor::new(super::actors::ActorType::Player, super::unit::get_id());
+        self.add_rect_to_actor(&mut a, size, super::color::RED);
+        self.w.player_atr_id = a.id.clone();
+        self.w.actors.push(a);        
+        self.w.player_atr_id.clone()
+    }
+
+    fn add_camera(&mut self) -> super::unit::Id {
+        let mut a = super::actors::Actor::new(super::actors::ActorType::Camera, super::unit::get_id());        
+        a.drawable  = super::render::Renderable::NoDraw;
+        a.collision = super::actors::Collision::NoCollision;
+        a.transform = super::unit::Position{ x:0 as f32, y:0 as f32};
+        
+        self.w.camera_atr_id = a.id.clone();
+        self.w.actors.push(a);        
+        self.w.camera_atr_id.clone()        
+    }
+
+    fn add_antagonist(&mut self, MAX_SIZE : f32) -> super::unit::Id {
+        let mut a = super::actors::Actor::new(super::actors::ActorType::Foreground, super::unit::get_id());   
+        return self.add_rect_type(a, MAX_SIZE);
+    }
+
+    fn add_background(&mut self, MAX_SIZE : f32) -> super::unit::Id {
+        let mut a = super::actors::Actor::new(super::actors::ActorType::Background, super::unit::get_id());     
+        return self.add_rect_type(a, MAX_SIZE);
+    }
+      
+    // fn add_text(&mut self, text: String, fontstyle: super::text::FontStyle, centered: bool) -> super::unit::Id{
+    //     let mut a   = super::actors::Actor::new(super::actors::ActorType::UI, super::unit::get_id());
+    //     a.drawctx   = super::actors::DrawContext::ScreenSpace;
+    //     a.drawable  = super::render::Renderable::DynamicTextDraw{ 
+    //         string  : text,
+    //         font    : fontstyle.name,
+    //         fontsize: fontstyle.size,
+    //         color   : fontstyle.color
+    //     };
+    //     let atr_id = a.id.clone();
+    //     self.w.actors.push(a);        
+    //     atr_id            
+    // }
 
     fn build(self) -> World{
         self.w

@@ -247,8 +247,7 @@ impl Scene {
 pub struct App {    
     renderer : render::Renderer,
     scenes: Vec::<Scene>, 
-    actors: Vec::<actors::Actor>,
-    meshes: Vec::<Mesh>,
+    actors: Vec::<actors::Actor>,    
     sounds: Vec::<audio::Source>,
     player: Option<Player>,
     camera: Camera,
@@ -276,8 +275,7 @@ impl App {
         let mut a = App {
             renderer : render::Renderer::new(),
             scenes : Vec::<Scene>::new(), 
-            actors : Vec::<actors::Actor>::new(),
-            meshes : Vec::<Mesh>::new(),
+            actors : Vec::<actors::Actor>::new(),            
             sounds : Vec::<audio::Source>::new(),
             player : None,
             camera : Camera{ actor_idx : 0 },

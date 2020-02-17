@@ -14,7 +14,7 @@ use ggez::input::keyboard::KeyCode;
 use ggez::event::KeyMods;
 use ggez::graphics;
 use ggez::conf;
-use ggez::graphics::{DrawParam,  Rect, Drawable, DrawMode, Mesh};
+use ggez::graphics::{Rect, DrawMode};
 use ggez::graphics::{Color};
 use ggez::timer;
 use ggez::audio;
@@ -172,7 +172,7 @@ impl Effect{
 
     }
 
-    pub fn on_actor(&self, actor : &mut actors::Actor, ctx: &Context, input : &InputState) -> Option::<level::WorldChange>{
+    pub fn on_actor(&self, _actor : &mut actors::Actor, _ctx: &Context, _input : &InputState) -> Option::<level::WorldChange>{
         // level::WorldChange {
         //     score: 0,
         //     level: None
@@ -303,6 +303,7 @@ impl App {
         s.active = true;
     }
 
+
     fn display_status(&self){
         println!("--> Result");
         for (i, s) in self.scenes.iter().enumerate() {
@@ -356,6 +357,7 @@ impl App {
         
     }
 
+    
     fn create_scene(&mut self, name : String) -> usize {
         self.scenes.push(Scene::new(name));
         return self.scenes.len() -1;

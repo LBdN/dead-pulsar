@@ -188,29 +188,27 @@ impl WorldBuilder{
         self.w.camera_atr_id.clone()        
     }
 
-    fn add_antagonist(&mut self, MAX_SIZE : f32) -> super::unit::Id {
+    fn add_antagonist(&mut self, max_size : f32) -> super::unit::Id {
         let mut a = super::actors::Actor::new(super::actors::ActorType::Foreground, super::unit::get_id());   
-        return self.add_rect_type(a, MAX_SIZE);
+        return self.add_rect_type(a, max_size);
     }
 
-    fn add_background(&mut self, MAX_SIZE : f32) -> super::unit::Id {
+    fn add_background(&mut self, max_size : f32) -> super::unit::Id {
         let mut a = super::actors::Actor::new(super::actors::ActorType::Background, super::unit::get_id());     
-        return self.add_rect_type(a, MAX_SIZE);
+        return self.add_rect_type(a, max_size);
     }
       
-    // fn add_text(&mut self, text: String, fontstyle: super::text::FontStyle, centered: bool) -> super::unit::Id{
-    //     let mut a   = super::actors::Actor::new(super::actors::ActorType::UI, super::unit::get_id());
-    //     a.drawctx   = super::actors::DrawContext::ScreenSpace;
-    //     a.drawable  = super::render::Renderable::DynamicTextDraw{ 
-    //         string  : text,
-    //         font    : fontstyle.name,
-    //         fontsize: fontstyle.size,
-    //         color   : fontstyle.color
-    //     };
-    //     let atr_id = a.id.clone();
-    //     self.w.actors.push(a);        
-    //     atr_id            
-    // }
+    fn add_text(&mut self, text: String, fontstyle: super::text::FontStyle, centered: bool) -> super::unit::Id{
+        let mut a   = super::actors::Actor::new(super::actors::ActorType::UI, super::unit::get_id());
+        a.drawctx   = super::actors::DrawContext::ScreenSpace;
+        a.drawable  = super::render::Renderable::DynamicTextDraw{ 
+            string  : text,
+            fontstyle : fontstyle            
+        };
+        let atr_id = a.id.clone();
+        self.w.actors.push(a);        
+        atr_id            
+    }
 
     fn build(self) -> World{
         self.w
@@ -234,5 +232,5 @@ impl Level{
     fn load(&self) -> World {
         let wb = WorldBuilder::new(self.name.clone());
         wb.build()
-    }
+    } 
 }

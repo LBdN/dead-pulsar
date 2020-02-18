@@ -18,7 +18,7 @@ use ggez::graphics::{Rect, DrawMode};
 use ggez::graphics::{Color};
 use ggez::timer;
 use ggez::audio;
-use ggez::audio::{SoundSource};
+
 
 
 // use cgmath::{Point2};
@@ -30,6 +30,7 @@ mod color;
 mod render;
 mod actors;
 mod level; 
+mod effect;
 
 /// **********************************************************************
 /// The `InputState` is exactly what it sounds like, it just keeps track of
@@ -68,129 +69,12 @@ pub struct World {
     size: [f64; 2]
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum Effect{
-    PlaceActor{actor_idx: usize, position: unit::Position},    
-    MoveActor{actor_idx: usize, vector: unit::Position},
-    UpdateScore{actor_idx: usize},
-    SetScore{new_value : i32},
-    ProcessInput,
-    KillActor{actor_idx: usize},
-    ResetActor{actor_idx: usize},
-    // NextScene{cur_scene_idx : usize, next_scene_idx : usize},
-    AutoNextScene{ duration : f32, cur_scene_idx : usize, next_scene_idx : usize},
-    PlaySound{sound_index : usize},
-}
 
-impl Effect{
-    pub fn apply(&self, app : &mut App, t : f32) -> bool{
-        match self{
-            Effect::MoveActor{actor_idx, vector} => {
-                let a = &mut app.actors[*actor_idx];
-                a.transform.x += vector.x;
-                a.transform.y += vector.y;
-                return false;
-            },
-            Effect::UpdateScore{actor_idx} => {
-                if let Some(pa) = app.player.as_mut(){                    
-                    if let Some(label_actor) = app.actors.get_mut(*actor_idx){ 
-                        if let render::Renderable::DynamicTextDraw{string, ..} = &mut label_actor.drawable{
-                            *string = format!( "Score: {}", pa.score);
-                        }
-                    }
-                }
-                return false;
-            },
-            Effect::SetScore{new_value} => {
-                if let Some(pa) = app.player.as_mut(){                    
-                        pa.score = *new_value;
-                }
-                return false;
-            },
-            Effect::PlaceActor{actor_idx, position} => {
-                let player_actor = &mut app.actors[*actor_idx];
-                player_actor.transform = *position;
-                true
-            },
-            Effect::ProcessInput => {
-                if let Some(pa) = &app.player{            
-                    if let Some(player_actor) = app.actors.get_mut(pa.actor_idx){                        
-                        //processing input
-                        player_handle_input(&pa, player_actor);
-                    }
-                }
-                return false;
-            },
-            Effect::KillActor{actor_idx} => {
-                let a = &mut app.actors[*actor_idx];
-                if let render::Renderable::DynamicRect{ref mut color, ..} = a.drawable {
-                    *color = color::GREEN;
-                }                 
-                a.ticking = false;                
-                return true;
-            },
-            Effect::ResetActor{actor_idx} => {
-                let a = &mut app.actors[*actor_idx];
-                if let render::Renderable::DynamicRect{ref mut color, ..} = a.drawable {
-                    *color = color::random_foreground_color();
-                } 
-                
-                a.ticking = true;                
-                false
-            }
-            Effect::AutoNextScene{duration, cur_scene_idx, next_scene_idx} => {
-                if *duration < t {
-                    let current_scene = & app.scenes[*cur_scene_idx];                                     
-                    let next_scene    = & app.scenes[*next_scene_idx];
-                    if current_scene.active == false && next_scene.active == true{
-                        return false;
-                    }
-                    // for (idx, mut scene) in &mut app.scenes.iter().enumerate(){
-                    //     scene.active = idx == *next_scene_idx;
-                    // }
-                    let current_scene = &mut app.scenes[*cur_scene_idx];    
-                    current_scene.active = false;
-                    current_scene.clone().stop(app);
-                    let next_scene    = &mut app.scenes[*next_scene_idx];
-                    next_scene.active = true;
-                    next_scene.clone().start(app);
-                    app.current_scene = *next_scene_idx;
-                    return false;                
-                }
-                return false;                
-            },
-            Effect::PlaySound{sound_index} => {
-                let s = &mut app.sounds[*sound_index];
-                let _ = s.play();
-                return true;
-            }
-
-        }        
-    }
-
-    pub fn update_state(&mut self){
-
-    }
-
-    pub fn on_actor(&self, _actor : &mut actors::Actor, _ctx: &Context, _input : &InputState) -> Option::<level::WorldChange>{
-        // level::WorldChange {
-        //     score: 0,
-        //     level: None
-        // }
-        None
-    }
-}
-
-#[derive(Default)]
-struct EffectResult{
-    scene_changed : bool,
-    dead_effects  : Vec::<usize>
-}
 
 #[derive(Debug, Clone)]
 struct Scene {
-    start_effects : Vec::<Effect>,
-    effects : Vec::<Effect>,
+    start_effects : Vec::<effect::Effect>,
+    effects : Vec::<effect::Effect>,
     actors: Vec::<usize>,    
     active: bool,
     name: String
@@ -200,8 +84,8 @@ struct Scene {
 impl Scene {
     pub fn new(name: String) -> Scene {
         Scene {
-            start_effects : Vec::<Effect>::new(),
-            effects : Vec::<Effect>::new(),
+            start_effects : Vec::<effect::Effect>::new(),
+            effects : Vec::<effect::Effect>::new(),
             actors : Vec::<usize>::new(),            
             active : false,
             name : name
@@ -229,10 +113,10 @@ impl Scene {
         }
     }
 
-    pub fn apply_effects(&self, app : &mut App, t : f32 ) -> EffectResult{
+    pub fn apply_effects(&self, app : &mut App, t : f32 ) -> effect::EffectResult{
         println!("apply_effects {}", self.name);
         let before_effect_scene = app.current_scene;
-        let mut eff_result = EffectResult::default();
+        let mut eff_result = effect::EffectResult::default();
         for (i, eff) in self.effects.iter().enumerate(){            
             let to_remove = eff.apply(app, t);
             if to_remove {
@@ -413,7 +297,7 @@ impl App {
         a.collision = actors::Collision::RectCollision { width: size.x, height: size.y };
     }
 
-    fn add_foreground_rects(&mut self, scene_idx: usize, eff : Effect) -> [usize; 100]{
+    fn add_foreground_rects(&mut self, scene_idx: usize, eff : effect::Effect) -> [usize; 100]{
         
         const MAX_SIZE : f32 = 50.0;
         let actor_len = self.actors.len();
@@ -426,7 +310,7 @@ impl App {
             a.transform = unit::Position{ x:x, y:y};
             self.rect_behavior(&mut a, size, color::random_foreground_color());
 
-            a.on_collision.push( Effect::KillActor{actor_idx:i+actor_len-1});
+            a.on_collision.push( effect::Effect::KillActor{actor_idx:i+actor_len-1});
             a.on_collision.push( eff);            
 
             indices[i] = self.add_actor(a, scene_idx);            
@@ -755,7 +639,7 @@ fn main() {
     {
         app.add_background_rects(& mut ctx, play_scene_idx);
         let sound_idx = app.add_sound("/Randomize6.wav".to_string(), &mut ctx);
-        let eff = Effect::PlaySound{sound_index:sound_idx};
+        let eff = effect::Effect::PlaySound{sound_index:sound_idx};
         let actor_idxs       = app.add_foreground_rects(play_scene_idx, eff);    
         let player_actor_idx = app.add_player(play_scene_idx);
         let camera_idx       = app.add_camera(play_scene_idx);
@@ -774,18 +658,18 @@ fn main() {
         a.transform = p;
                 
         let s = &mut app.scenes[play_scene_idx];
-        s.effects.push( Effect::MoveActor{actor_idx:camera_idx,       vector:unit::Position{x:-1.0, y:0.0}} );
-        s.effects.push( Effect::MoveActor{actor_idx:player_actor_idx, vector:unit::Position{x :1.0, y:0.0}} );    
-        s.effects.push( Effect::ProcessInput );     
-        s.effects.push( Effect::UpdateScore{actor_idx:text_idx});
+        s.effects.push( effect::Effect::MoveActor{actor_idx:camera_idx,       vector:unit::Position{x:-1.0, y:0.0}} );
+        s.effects.push( effect::Effect::MoveActor{actor_idx:player_actor_idx, vector:unit::Position{x :1.0, y:0.0}} );    
+        s.effects.push( effect::Effect::ProcessInput );     
+        s.effects.push( effect::Effect::UpdateScore{actor_idx:text_idx});
 
         let mut p_pos = center.clone();
         p_pos.x = 10.0;
-        s.start_effects.push( Effect::PlaceActor{actor_idx:player_actor_idx, position: p_pos} );
-        s.start_effects.push( Effect::PlaceActor{actor_idx:camera_idx, position:  unit::Position{ x:0 as f32, y:0 as f32}} );
-        s.start_effects.push( Effect::SetScore{new_value : 0} );
+        s.start_effects.push( effect::Effect::PlaceActor{actor_idx:player_actor_idx, position: p_pos} );
+        s.start_effects.push( effect::Effect::PlaceActor{actor_idx:camera_idx, position:  unit::Position{ x:0 as f32, y:0 as f32}} );
+        s.start_effects.push( effect::Effect::SetScore{new_value : 0} );
         for i in actor_idxs.iter() {
-            s.start_effects.push( Effect::ResetActor{actor_idx : *i} );
+            s.start_effects.push( effect::Effect::ResetActor{actor_idx : *i} );
         }
         
         
@@ -804,7 +688,7 @@ fn main() {
         let a = &mut app.actors[text_idx];
         a.transform = center;
         let s = &mut app.scenes[lose_scene_idx];
-        let auto_transition = Effect::AutoNextScene{duration:3.0, cur_scene_idx : lose_scene_idx, next_scene_idx : intro_scene_idx};        
+        let auto_transition = effect::Effect::AutoNextScene{duration:3.0, cur_scene_idx : lose_scene_idx, next_scene_idx : intro_scene_idx};        
         s.effects.push( auto_transition );
     }
     let win_scene_idx = app.create_scene("Victory".to_string());
@@ -813,28 +697,28 @@ fn main() {
         let a = &mut app.actors[text_idx];
         a.transform = center;
         let s = &mut app.scenes[win_scene_idx];
-        let auto_transition = Effect::AutoNextScene{duration:3.0, cur_scene_idx : win_scene_idx, next_scene_idx : intro_scene_idx};        
+        let auto_transition = effect::Effect::AutoNextScene{duration:3.0, cur_scene_idx : win_scene_idx, next_scene_idx : intro_scene_idx};        
         s.effects.push( auto_transition );
     }
 
     {
         let s = &mut app.scenes[intro_scene_idx];
-        let auto_transition = Effect::AutoNextScene{duration:3.0, cur_scene_idx : intro_scene_idx, next_scene_idx : tutorial_idx};        
+        let auto_transition = effect::Effect::AutoNextScene{duration:3.0, cur_scene_idx : intro_scene_idx, next_scene_idx : tutorial_idx};        
         s.effects.push( auto_transition );
     }
     {
         let s = &mut app.scenes[tutorial_idx];
-        let auto_transition = Effect::AutoNextScene{duration:3.0, cur_scene_idx : tutorial_idx, next_scene_idx : play_scene_idx};        
+        let auto_transition = effect::Effect::AutoNextScene{duration:3.0, cur_scene_idx : tutorial_idx, next_scene_idx : play_scene_idx};        
         s.effects.push( auto_transition );
     }
     {
-        let lose_game_transition = Effect::AutoNextScene{duration:0.0, cur_scene_idx : play_scene_idx, next_scene_idx : lose_scene_idx};
+        let lose_game_transition = effect::Effect::AutoNextScene{duration:0.0, cur_scene_idx : play_scene_idx, next_scene_idx : lose_scene_idx};
         let a = &mut app.actors[lose_rect1_idx];                
         a.on_collision.push(lose_game_transition);    
         let a2 = &mut app.actors[lose_rect2_idx];                
         a2.on_collision.push(lose_game_transition);        
 
-        let win_game_transition = Effect::AutoNextScene{duration:0.0, cur_scene_idx : play_scene_idx, next_scene_idx : win_scene_idx};
+        let win_game_transition = effect::Effect::AutoNextScene{duration:0.0, cur_scene_idx : play_scene_idx, next_scene_idx : win_scene_idx};
         let a2 = &mut app.actors[win_rect_idx];                
         a2.on_collision.push(win_game_transition);        
     }

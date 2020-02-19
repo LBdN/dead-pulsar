@@ -1,5 +1,5 @@
 use crate::App;
-use crate::unit;
+use crate::unit::*;
 use crate::render;
 use crate::player_handle_input;
 use crate::InputState;
@@ -12,30 +12,31 @@ use ggez::{Context};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Effect{
-    PlaceActor{actor_idx: usize, position: unit::Position},    
-    MoveActor{actor_idx: usize, vector: unit::Position},
-    UpdateScore{actor_idx: usize},
+    PlaceActor{actor_id: Id, position: Position},    
+    MoveActor{actor_id: Id, vector: Position},
+    UpdateScore{actor_id: Id},
     SetScore{new_value : i32},
     ProcessInput,
-    KillActor{actor_idx: usize},
-    ResetActor{actor_idx: usize},
+    KillActor{actor_id: Id},
+    ResetActor{actor_id: Id},
     // NextScene{cur_scene_idx : usize, next_scene_idx : usize},
     AutoNextScene{ duration : f32, cur_scene_idx : usize, next_scene_idx : usize},
-    PlaySound{sound_index : usize},
+    PlaySound{sound_index : Id},
 }
 
 impl Effect{
     pub fn apply(&self, app : &mut App, t : f32) -> bool{
         match self{
-            Effect::MoveActor{actor_idx, vector} => {
-                let a = &mut app.actors[*actor_idx];
-                a.transform.x += vector.x;
-                a.transform.y += vector.y;
+            Effect::MoveActor{actor_id, vector} => {
+                if let Some(a) = app.actors.get_mut(actor_id){
+                    a.transform.x += vector.x;
+                    a.transform.y += vector.y;                    
+                }
                 return false;
             },
-            Effect::UpdateScore{actor_idx} => {
+            Effect::UpdateScore{actor_id} => {
                 if let Some(pa) = app.player.as_mut(){                    
-                    if let Some(label_actor) = app.actors.get_mut(*actor_idx){ 
+                    if let Some(label_actor) = app.actors.get_mut(actor_id){ 
                         if let render::Renderable::DynamicTextDraw{string, ..} = &mut label_actor.drawable{
                             *string = format!( "Score: {}", pa.score);
                         }
@@ -49,30 +50,30 @@ impl Effect{
                 }
                 return false;
             },
-            Effect::PlaceActor{actor_idx, position} => {
-                let player_actor = &mut app.actors[*actor_idx];
+            Effect::PlaceActor{actor_id, position} => {
+                let player_actor = app.actors.get_mut(actor_id).unwrap();
                 player_actor.transform = *position;
                 true
             },
             Effect::ProcessInput => {
-                if let Some(pa) = &app.player{            
-                    if let Some(player_actor) = app.actors.get_mut(pa.actor_idx){                        
+                if let Some(pa) = app.player.as_mut(){            
+                    if let Some(player_actor) = app.actors.get_mut(&pa.actor_id){                        
                         //processing input
                         player_handle_input(&pa, player_actor);
                     }
                 }
                 return false;
             },
-            Effect::KillActor{actor_idx} => {
-                let a = &mut app.actors[*actor_idx];
+            Effect::KillActor{actor_id} => {
+                let a = app.actors.get_mut(actor_id).unwrap();
                 if let render::Renderable::DynamicRect{ref mut color, ..} = a.drawable {
                     *color = color::GREEN;
                 }                 
                 a.ticking = false;                
                 return true;
             },
-            Effect::ResetActor{actor_idx} => {
-                let a = &mut app.actors[*actor_idx];
+            Effect::ResetActor{actor_id} => {
+                let a = app.actors.get_mut(actor_id).unwrap();
                 if let render::Renderable::DynamicRect{ref mut color, ..} = a.drawable {
                     *color = color::random_foreground_color();
                 } 
@@ -102,13 +103,13 @@ impl Effect{
                 return false;                
             },
             Effect::PlaySound{sound_index} => {
-                let s = &mut app.sounds[*sound_index];
+                let s = app.sounds.get_mut(sound_index).unwrap();
                 let _ = s.play();
                 return true;
             }
 
         }        
-    }
+    } 
 
     pub fn on_actor(&self, _actor : &mut actors::Actor, _ctx: &Context, _input : &InputState) -> Option::<level::WorldChange>{
         // level::WorldChange {

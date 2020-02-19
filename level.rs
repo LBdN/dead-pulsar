@@ -217,22 +217,52 @@ impl WorldBuilder{
     }
 }
 
-struct Level{
-    id   : Id,
-    name : String,
-    transitions : HashMap::<String, Id>
+type LevelLoader = fn(&Level) -> World;
+
+
+pub struct Level{
+    id         : Id,
+    name       : String,
+    transitions: HashMap::<String, Id>,
+    loader     : LevelLoader,    
 }
 
 impl Level{
     pub fn new(name : String) -> Level{
         Level{
-            id : get_id(),
-            name : name,
-            transitions : HashMap::<String, Id>::new()
+            id         : get_id(),
+            name       : name,
+            transitions: HashMap::<String, Id>::new(),
+            loader     : emptyload
         }
     }
-    fn load(&self) -> World {
-        let wb = WorldBuilder::new(self.name.clone());
-        wb.build()
-    } 
+
+    pub fn add_transition(&mut self, transition_name : &String, level : &Level){
+        self.transitions.insert(transition_name.clone(), level.id.clone());
+    }
+
+    pub fn load(&self) -> World {
+        return (self.loader)(self);
+    }
+    
 }
+
+fn emptyload(level : &Level) -> World {
+    let wb = WorldBuilder::new(level.name.clone());
+    wb.build()
+} 
+
+fn introload(level : &Level) -> World {
+    let wb = WorldBuilder::new(level.name.clone());
+
+    let id = wb.add_text("Pulsar 3".to_string(), super::title_style,true);
+    let eff =  effect::Effect::AutoNextScene{duration:3.0, cur_scene_idx : intro_scene_idx, next_scene_idx : tutorial_idx} ;
+    wb.w.effects.insert( id, vec![eff] );
+    // let intro_scene_idx = app.create_scene("intro".to_string());    
+    // let text_id = app.add_text("Pulsar 3".to_string(), title_style.clone(), true, intro_scene_idx, true);
+    // let a = app.actors.get_mut(&text_id).unwrap();
+    // a.transform = center;
+    // effect::Effect::AutoNextScene{duration:3.0, cur_scene_idx : intro_scene_idx, next_scene_idx : tutorial_idx};        
+
+    wb.build()
+} 

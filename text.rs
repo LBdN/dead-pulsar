@@ -30,4 +30,31 @@ impl FontStyle{
     }
 }
 
+pub fn title_style() -> FontStyle{
+    FontStyle{
+        size: 56.0,
+        name: "edundot".to_string(),
+        weight: FontWeight::Normal,
+        color: ggez::graphics::WHITE,
+    }
+}
+
+pub fn tuto_style() -> FontStyle{
+    FontStyle{
+        size: 30.0,
+        name: "V5PRD___".to_string(),
+        weight: FontWeight::Normal,
+        color: ggez::graphics::WHITE,
+    }
+}
+
+pub fn ui_style() -> FontStyle{
+    FontStyle{
+        size: 28.0,
+        name: "edundot".to_string(),
+        weight: FontWeight::Normal,
+        color: ggez::graphics::WHITE,
+    }
+}
+
 

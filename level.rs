@@ -4,6 +4,7 @@ use ggez::graphics::{Color};
 use rand::Rng;
 use crate::unit::*;
 use crate::effect;
+use crate::text;
 
 
 fn random_rect(maxsize : f32, world_size : &Size) -> (f32, f32, Size) {
@@ -21,7 +22,7 @@ pub struct WorldChange{
 
 type KeyedEffects = KeyedGroup::<effect::Effect>;
 
-struct World{
+pub struct World{
     start_effects : KeyedEffects,
     effects       : KeyedEffects,
     actors        : Vec::<super::actors::Actor>,        
@@ -69,12 +70,25 @@ impl World{
     }
 
     fn get_player_actor(&self) -> &super::actors::Actor {
+        self.get_actor(&self.player_atr_id).unwrap()     
+    }
+
+    fn get_actor(&self, id : &Id) -> Option::<&super::actors::Actor> {
         for a in &self.actors{
-            if a.id == self.player_atr_id {
-                return a
+            if a.id == *id {
+                return Some(a);
             }
         }
-        return &self.actors[0];
+        None
+    }
+
+    fn get_mut_actor(&mut self, id : &Id) -> Option::<&mut super::actors::Actor> {
+        for a in &mut self.actors{
+            if a.id == *id {
+                return Some(a);
+            }
+        }
+        None
     }
 
     fn process_collisions(&mut self){
@@ -142,12 +156,16 @@ impl WorldBuilder{
         WorldBuilder { w : World::new(name)}
     }
 
-    fn add_effect_to_actor(&mut self, a : &super::actors::Actor, eff : effect::Effect, start : bool ){
-        let opt_effs = if start { self.w.start_effects.get_mut(&a.id) } 
-                       else { self.w.effects.get_mut(&a.id) };            
-        if let Some(effs) = opt_effs {
-            effs.push(eff);
-        }                    
+    fn get_mut_actor(&mut self, id : &Id) -> Option::<&mut super::actors::Actor>{
+        self.w.get_mut_actor(id)
+    }
+
+    fn add_effect_to_actor(&mut self, actor_id : &Id, eff : effect::Effect, start : bool ){
+        
+        let opt_effs = if start { self.w.start_effects.entry(*actor_id) } 
+                       else { self.w.effects.entry(*actor_id) };            
+        let effs = opt_effs.or_insert(Vec::<effect::Effect>::new());
+        effs.push(eff);                            
     }
 
     fn add_rect_to_actor(&mut self, a : &mut super::actors::Actor, size: Size, color : Color){
@@ -217,14 +235,14 @@ impl WorldBuilder{
     }
 }
 
-type LevelLoader = fn(&Level) -> World;
+type LevelLoader = fn(&Level, Position) -> World;
 
 
 pub struct Level{
     id         : Id,
     name       : String,
     transitions: HashMap::<String, Id>,
-    loader     : LevelLoader,    
+    pub loader     : LevelLoader,    
 }
 
 impl Level{
@@ -242,27 +260,39 @@ impl Level{
     }
 
     pub fn load(&self) -> World {
-        return (self.loader)(self);
+        let center = Position{x: 0.0, y: 0.0};
+        return (self.loader)(self, center);
+    }
+
+    pub fn get_transition_effect(&self, transition_name : String) -> effect::Effect{
+        let next_id = self.transitions.get(&transition_name).unwrap();
+        effect::Effect::AutoNextScene{ duration:3.0, cur_scene_idx : self.id.clone(), next_scene_idx : next_id.clone()} 
     }
     
 }
 
-fn emptyload(level : &Level) -> World {
+fn emptyload(level : &Level, center : Position) -> World {
     let wb = WorldBuilder::new(level.name.clone());
     wb.build()
 } 
 
-fn introload(level : &Level) -> World {
-    let wb = WorldBuilder::new(level.name.clone());
+pub fn introload(level : &Level, center : Position) -> World {
+    let mut wb = WorldBuilder::new(level.name.clone());
 
-    let id = wb.add_text("Pulsar 3".to_string(), super::title_style,true);
-    let eff =  effect::Effect::AutoNextScene{duration:3.0, cur_scene_idx : intro_scene_idx, next_scene_idx : tutorial_idx} ;
-    wb.w.effects.insert( id, vec![eff] );
-    // let intro_scene_idx = app.create_scene("intro".to_string());    
-    // let text_id = app.add_text("Pulsar 3".to_string(), title_style.clone(), true, intro_scene_idx, true);
-    // let a = app.actors.get_mut(&text_id).unwrap();
-    // a.transform = center;
-    // effect::Effect::AutoNextScene{duration:3.0, cur_scene_idx : intro_scene_idx, next_scene_idx : tutorial_idx};        
+    let id = wb.add_text("Pulsar 3".to_string(), text::title_style(),true);     
+    wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string()), false );
+    wb.get_mut_actor(&id).unwrap().transform = center;        
 
     wb.build()
 } 
+
+pub fn tutoload(level : &Level, center : Position) -> World {
+    let mut wb = WorldBuilder::new(level.name.clone());
+
+    let tuto_text = "Catch the yellow blocks and\n exit with the green one.".to_string();
+    let id = wb.add_text(tuto_text, text::tuto_style(),true);     
+    wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string()), false );
+    wb.get_mut_actor(&id).unwrap().transform = center;        
+
+    wb.build()
+}

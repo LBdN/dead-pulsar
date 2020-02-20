@@ -20,7 +20,7 @@ pub enum Effect{
     KillActor{actor_id: Id},
     ResetActor{actor_id: Id},
     // NextScene{cur_scene_idx : usize, next_scene_idx : usize},
-    AutoNextScene{ duration : f32, cur_scene_idx : usize, next_scene_idx : usize},
+    AutoNextScene{ duration : f32, cur_scene_idx : Id, next_scene_idx : Id},
     PlaySound{sound_index : Id},
 }
 
@@ -83,18 +83,18 @@ impl Effect{
             }
             Effect::AutoNextScene{duration, cur_scene_idx, next_scene_idx} => {
                 if *duration < t {
-                    let current_scene = & app.scenes[*cur_scene_idx];                                     
-                    let next_scene    = & app.scenes[*next_scene_idx];
+                    let current_scene = & app.scenes[cur_scene_idx];                                     
+                    let next_scene    = & app.scenes[next_scene_idx];
                     if current_scene.active == false && next_scene.active == true{
                         return false;
                     }
                     // for (idx, mut scene) in &mut app.scenes.iter().enumerate(){
                     //     scene.active = idx == *next_scene_idx;
                     // }
-                    let current_scene = &mut app.scenes[*cur_scene_idx];    
+                    let current_scene = app.get_mut_scene(cur_scene_idx);    
                     current_scene.active = false;
                     current_scene.clone().stop(app);
-                    let next_scene    = &mut app.scenes[*next_scene_idx];
+                    let next_scene    = app.get_mut_scene(next_scene_idx);
                     next_scene.active = true;
                     next_scene.clone().start(app);
                     app.current_scene = *next_scene_idx;

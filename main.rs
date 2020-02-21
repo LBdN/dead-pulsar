@@ -164,9 +164,15 @@ fn connect_levels(app : &mut App){
     //
     intro.loader = level::introload;
     tutorial.loader = level::tutoload;
+    gameover.loader = level::gameoverload;
+    victory.loader = level::victoryload;
+    play.loader = level::playload;
     app.levels.push(intro);
     app.levels.push(tutorial);
-    app.levels[0].load();
+    app.levels.push(gameover);
+    app.levels.push(victory);
+    app.levels.push(play);
+    app.levels[4].load();
 }
 
 impl App {

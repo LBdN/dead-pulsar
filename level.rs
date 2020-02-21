@@ -156,6 +156,10 @@ impl WorldBuilder{
         WorldBuilder { w : World::new(name)}
     }
 
+    fn set_size(&mut self, size : Size){
+        self.w.size = size;
+    }
+
     fn get_mut_actor(&mut self, id : &Id) -> Option::<&mut super::actors::Actor>{
         self.w.get_mut_actor(id)
     }
@@ -293,6 +297,73 @@ pub fn tutoload(level : &Level, center : Position) -> World {
     let id = wb.add_text(tuto_text, text::tuto_style(),true);     
     wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string()), false );
     wb.get_mut_actor(&id).unwrap().transform = center;        
+
+    wb.build()
+}
+
+pub fn gameoverload(level : &Level, center : Position) -> World {
+    let mut wb = WorldBuilder::new(level.name.clone());
+
+    let id = wb.add_text("Game Over".to_string(), text::title_style(),true);     
+    wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string()), false );
+    wb.get_mut_actor(&id).unwrap().transform = center;        
+
+    wb.build()
+} 
+
+pub fn victoryload(level : &Level, center : Position) -> World {
+    let mut wb = WorldBuilder::new(level.name.clone());
+
+    let id = wb.add_text("Victory".to_string(), text::title_style(),true);     
+    wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string()), false );
+    wb.get_mut_actor(&id).unwrap().transform = center;        
+
+    wb.build()
+} 
+
+pub fn playload(level : &Level, center : Position) -> World {
+    let mut wb = WorldBuilder::new(level.name.clone());
+    wb.set_size(Size{x:1000.0, y:640.0});
+
+    let max_size = 50.0;
+    for i in 0..10000{
+        wb.add_background(max_size);
+    }
+    // let sound_idx = wb.add_sound("/Randomize6.wav".to_string(), &mut ctx);
+    for i in 0..100{
+        let id = wb.add_antagonist(max_size);
+        wb.add_effect_to_actor(&id, effect::Effect::ResetActor{actor_id : id.clone()}, true);
+        let a = wb.get_mut_actor(&id).unwrap();
+        a.on_collision.push(effect::Effect::KillActor{actor_id:a.id.clone()});            
+        // a.on_collision.push(effect::Effect::PlaySound{sound_index:sound_idx});
+    }
+
+    let mut player_start = center.clone();
+    player_start.x = 10.0;
+    let player_actor_id = wb.add_player();
+    let eff = effect::Effect::MoveActor{actor_id:player_actor_id, vector:Position{x :1.0, y:0.0}};
+    wb.add_effect_to_actor(&player_actor_id, eff, false);
+    wb.add_effect_to_actor(&player_actor_id, effect::Effect::ProcessInput, false);
+    let eff = effect::Effect::PlaceActor{actor_id:player_actor_id, position: player_start};
+    wb.add_effect_to_actor(&player_actor_id, eff, true);
+
+    let camera_start = Position{ x:0 as f32, y:0 as f32};
+    let camera_id = wb.add_camera();
+    let eff = effect::Effect::MoveActor{actor_id:camera_id, vector:Position{x :1.0, y:0.0}};
+    wb.add_effect_to_actor(&camera_id, eff, false);
+    let eff = effect::Effect::PlaceActor{actor_id:camera_id, position: camera_start};
+    wb.add_effect_to_actor(&camera_id, eff, true);
+
+    let text_id  = wb.add_text("Pulsar 3".to_string(), text::ui_style(), true);
+    wb.get_mut_actor(&text_id).unwrap().transform = Position{x: 10.0, y: 10.0};    
+
+    let margin = 10.0;
+    // let gtext = renderer.render(wb.get_mut_actor(text_id).drawable);
+    // let p = Position{x:a.transform.x+gtext.width(&mut ctx) as f32 +margin, y: 10.0};        
+    let text_id = wb.add_text("Score: 0".to_string(), text::ui_style(), false);    
+    // wb.get_mut_actor(&text_id).unwrap().transform= p;
+    wb.add_effect_to_actor(&text_id, effect::Effect::SetScore{new_value : 0}, true);
+    wb.add_effect_to_actor(&text_id, effect::Effect::UpdateScore{actor_id:text_id}, false);
 
     wb.build()
 }

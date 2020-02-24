@@ -5,6 +5,9 @@ use rand::Rng;
 use crate::unit::*;
 use crate::effect;
 use crate::text;
+use crate::color;
+use crate::terrain;
+use crate::render;
 
 
 fn random_rect(maxsize : f32, world_size : &Size) -> (f32, f32, Size) {
@@ -25,7 +28,7 @@ type KeyedEffects = KeyedGroup::<effect::Effect>;
 pub struct World{
     start_effects : KeyedEffects,
     effects       : KeyedEffects,
-    actors        : Vec::<super::actors::Actor>,        
+    pub actors        : Vec::<super::actors::Actor>,        
     player_atr_id : Id,
     camera_atr_id : Id,
     //
@@ -50,17 +53,23 @@ impl World{
         }
     }
 
-    fn start(&mut self, ctx: &Context, input : &super::InputState){
+    // pub fn start(&mut self, ctx: &Context, input : &super::InputState){
+    pub fn start(&mut self){
         self.active = true;
-        //..
+        //
         for a in &mut self.actors{
-            for effs in self.start_effects.get_mut(&a.id){
-                for e in effs{
-                    e.on_actor(a, ctx, input );
-                }
-            }
-        }
-        self.start_effects.clear();
+            a.visible = true;
+        }            
+        return;
+        //..
+        // for a in &mut self.actors{
+        //     for effs in self.start_effects.get_mut(&a.id){
+        //         for e in effs{
+        //             e.on_actor(a, ctx, input );
+        //         }
+        //     }
+        // }
+        // self.start_effects.clear();
     }
 
     fn stop(&mut self){
@@ -180,11 +189,11 @@ impl WorldBuilder{
         a.collision = super::actors::Collision::RectCollision { width: size.x, height: size.y };
     }
 
-    fn add_rect_type(&mut self, mut a :  super::actors::Actor, max_size : f32) -> Id {
+    fn add_rect_type(&mut self, mut a :  super::actors::Actor, max_size : f32, color : Color) -> Id {
         let (x, y, size) = random_rect(max_size, &self.w.size);
 
         a.transform = Position{ x:x, y:y};
-        self.add_rect_to_actor(&mut a, size, super::color::random_foreground_color());
+        self.add_rect_to_actor(&mut a, size, color);
         let atr_id = a.id.clone();
         self.w.actors.push(a);        
         atr_id
@@ -214,12 +223,21 @@ impl WorldBuilder{
 
     fn add_antagonist(&mut self, max_size : f32) -> Id {
         let mut a = super::actors::Actor::new(super::actors::ActorType::Foreground, get_id());   
-        return self.add_rect_type(a, max_size);
+        return self.add_rect_type(a, max_size, color::random_foreground_color());
     }
 
     fn add_background(&mut self, max_size : f32) -> Id {
         let mut a = super::actors::Actor::new(super::actors::ActorType::Background, get_id());     
-        return self.add_rect_type(a, max_size);
+        return self.add_rect_type(a, max_size, color::GREEN);        
+    }
+
+    fn add_terrain(&mut self, renderer: &mut render::Renderer, ctx : &mut Context) -> Id {
+        let mut a = super::actors::Actor::new(super::actors::ActorType::Terrain, get_id());     
+        let pts = terrain::build_terrain(self.w.size, self.w.size.x / 10.0);        
+        a.drawable = renderer.build_mesh(pts, color::RED, ctx);
+        let id = a.id.clone();
+        self.w.actors.push(a);        
+        id
     }
       
     fn add_text(&mut self, text: String, fontstyle: super::text::FontStyle, centered: bool) -> Id{
@@ -239,7 +257,7 @@ impl WorldBuilder{
     }
 }
 
-type LevelLoader = fn(&Level, Position) -> World;
+type LevelLoader = fn(&Level, Position, &mut render::Renderer, &mut Context) -> World;
 
 
 pub struct Level{
@@ -263,9 +281,9 @@ impl Level{
         self.transitions.insert(transition_name.clone(), level.id.clone());
     }
 
-    pub fn load(&self) -> World {
+    pub fn load(&self, renderer: &mut render::Renderer, ctx: &mut Context) -> World {
         let center = Position{x: 0.0, y: 0.0};
-        return (self.loader)(self, center);
+        return (self.loader)(self, center, renderer, ctx);
     }
 
     pub fn get_transition_effect(&self, transition_name : String) -> effect::Effect{
@@ -275,12 +293,12 @@ impl Level{
     
 }
 
-fn emptyload(level : &Level, center : Position) -> World {
+fn emptyload(level : &Level, center : Position, renderer: &mut render::Renderer, ctx: &mut Context) -> World {
     let wb = WorldBuilder::new(level.name.clone());
     wb.build()
 } 
 
-pub fn introload(level : &Level, center : Position) -> World {
+pub fn introload(level : &Level, center : Position, renderer: &mut render::Renderer, ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
 
     let id = wb.add_text("Pulsar 3".to_string(), text::title_style(),true);     
@@ -290,7 +308,7 @@ pub fn introload(level : &Level, center : Position) -> World {
     wb.build()
 } 
 
-pub fn tutoload(level : &Level, center : Position) -> World {
+pub fn tutoload(level : &Level, center : Position, renderer: &mut render::Renderer, ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
 
     let tuto_text = "Catch the yellow blocks and\n exit with the green one.".to_string();
@@ -301,7 +319,7 @@ pub fn tutoload(level : &Level, center : Position) -> World {
     wb.build()
 }
 
-pub fn gameoverload(level : &Level, center : Position) -> World {
+pub fn gameoverload(level : &Level, center : Position, renderer: &mut render::Renderer, ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
 
     let id = wb.add_text("Game Over".to_string(), text::title_style(),true);     
@@ -311,7 +329,7 @@ pub fn gameoverload(level : &Level, center : Position) -> World {
     wb.build()
 } 
 
-pub fn victoryload(level : &Level, center : Position) -> World {
+pub fn victoryload(level : &Level, center : Position, renderer: &mut render::Renderer, ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
 
     let id = wb.add_text("Victory".to_string(), text::title_style(),true);     
@@ -321,16 +339,19 @@ pub fn victoryload(level : &Level, center : Position) -> World {
     wb.build()
 } 
 
-pub fn playload(level : &Level, center : Position) -> World {
+pub fn playload(level : &Level, center : Position, renderer: &mut render::Renderer, ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
     wb.set_size(Size{x:1000.0, y:640.0});
 
+    wb.add_terrain(renderer, ctx);
     let max_size = 50.0;
-    for i in 0..10000{
+    for _ in 0..1000{
         wb.add_background(max_size);
     }
+    wb.add_terrain(renderer, ctx);
+    
     // let sound_idx = wb.add_sound("/Randomize6.wav".to_string(), &mut ctx);
-    for i in 0..100{
+    for _ in 0..1000{
         let id = wb.add_antagonist(max_size);
         wb.add_effect_to_actor(&id, effect::Effect::ResetActor{actor_id : id.clone()}, true);
         let a = wb.get_mut_actor(&id).unwrap();

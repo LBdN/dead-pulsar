@@ -2,7 +2,7 @@ use ggez::graphics;
 use ggez::graphics::{DrawParam, Color, Rect, Drawable, DrawMode, Mesh};
 use ggez::{Context, GameResult};
 
-
+use crate::unit::*;
 use std::collections::HashMap;
 
 pub struct Renderer{
@@ -50,8 +50,19 @@ impl Renderer{
         return graphics::present(ctx);
     }
 
+    pub fn build_mesh(&mut self, pts : Vec::<Position>, color: Color, ctx: &mut Context) -> Renderable{
+        let mut mb = graphics::MeshBuilder::new();
+        let _ = mb.polygon(DrawMode::fill(), &pts, color);
+        let mesh = mb.build(ctx).unwrap();
+        self.meshes.push(mesh);
+        Renderable::StaticRect( self.meshes.len() - 1)
+    }
 }
 
+pub enum TextRenderState{
+    Dirty,    
+    TextState(graphics::Text),
+}
 
 pub enum TextAnchor{
     Center,

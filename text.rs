@@ -2,12 +2,12 @@ use ggez::graphics::{Color, WHITE};
 
 #[derive(Copy, Clone)]
 pub enum FontWeight{
-    Light,
-    LightItalic,
+    // Light,
+    // LightItalic,
     Normal,
     NormalItalic,
     Bold,
-    BoldItalic,
+    // BoldItalic,
 }
 
 #[derive(Clone)]
@@ -20,7 +20,7 @@ pub struct FontStyle{
 
 
 impl FontStyle{
-    pub fn new() -> FontStyle{
+    pub fn default() -> FontStyle{
         FontStyle{
             size: 10.0,
             name: "".to_string(),

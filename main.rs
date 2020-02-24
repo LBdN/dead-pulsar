@@ -32,7 +32,7 @@ mod render;
 mod actors;
 mod level; 
 mod effect;
-
+mod terrain;
 /// **********************************************************************
 /// The `InputState` is exactly what it sounds like, it just keeps track of
 /// the user's input state so that we turn keyboard events into something
@@ -144,11 +144,12 @@ pub struct App {
     started: bool,
     current_scene : Id,  
     last_scene_change: f32,
-    levels : Vec::<level::Level>
+    levels : Vec::<level::Level>,
+    worlds : Vec::<level::World>
 }
 
 
-fn connect_levels(app : &mut App){
+fn connect_levels(app : &mut App, ctx: &mut Context){
     let mut intro    = level::Level::new("Intro".to_string());
     let mut tutorial = level::Level::new("tuto".to_string());
     let mut play     = level::Level::new("play".to_string());
@@ -172,7 +173,9 @@ fn connect_levels(app : &mut App){
     app.levels.push(gameover);
     app.levels.push(victory);
     app.levels.push(play);
-    app.levels[4].load();
+    let mut w = app.levels[4].load(&mut app.renderer, ctx);
+    w.start();
+    app.worlds.push(w);
 }
 
 impl App {
@@ -201,7 +204,8 @@ impl App {
             started : false,
             current_scene : no_id(),
             last_scene_change : 0.0,
-            levels : Vec::<level::Level>::new()
+            levels : Vec::<level::Level>::new(),
+            worlds : Vec::<level::World>::new()
         };
 
         a.renderer.fonts = fonts;
@@ -370,7 +374,7 @@ impl App {
 
         let mut yy = 0.0;
         for (i, rect_height) in [lose_rect_height, exit_size, lose_rect_height].iter().enumerate() {
-            let mut a = actors::Actor::new(actors::ActorType::EndGame, unit::get_id());
+            let mut a = actors::Actor::new(actors::ActorType::Terrain, unit::get_id());
             a.transform = unit::Position{ x:self.world.size[0] as f32, y:yy as f32};
             let size = unit::Size{ x:50 as f32, y:*rect_height as f32 };
 
@@ -523,7 +527,8 @@ impl EventHandler for App {
         let mut draw_ctx = actors::DrawContext::WorldSpace;        
         self.renderer.push_cam_transform(ctx);
 
-        for a in self.actors.values() {
+        // for a in self.actors.values() {
+        for a in &self.worlds[0].actors {
             if !a.visible {
                 continue;
             }
@@ -653,7 +658,7 @@ fn main() {
     // so it can load resources like images during setup.
     let mut app = App::new(&mut ctx);
 
-    connect_levels(&mut app);
+    connect_levels(&mut app, &mut ctx);
 
     let center = unit::Position{x: 400.0, y: 300.0};
 

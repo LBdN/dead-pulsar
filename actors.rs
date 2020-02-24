@@ -54,7 +54,7 @@ pub enum ActorType {
     Background,
     Foreground,
     Player,
-    EndGame,
+    Terrain,
     UI,
     Camera
 }

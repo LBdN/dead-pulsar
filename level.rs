@@ -8,6 +8,7 @@ use crate::text;
 use crate::color;
 use crate::terrain;
 use crate::render;
+use crate::InputState;
 
 
 fn random_rect(maxsize : f32, world_size : &Size) -> (f32, f32, Size) {
@@ -33,19 +34,23 @@ pub struct World{
     camera_atr_id : Id,
     //
     active        : bool,
-    name          : String,
+    pub name          : String,
     size          : Size
 
 }
 
 impl World{
+    pub fn empty() -> World{
+        World::new("".to_string())
+    }
+
     fn new(name : String) -> World {
         World{
             start_effects : KeyedEffects::new(),
             effects       : KeyedEffects::new(),
             actors        : Vec::<super::actors::Actor>::new(),    
-            player_atr_id : get_id(),
-            camera_atr_id : get_id(),
+            player_atr_id : no_id(),
+            camera_atr_id : no_id(),
             active        : false,
             name          : name,
             size          :Size{x:0.0, y:0.0}
@@ -54,35 +59,38 @@ impl World{
     }
 
     // pub fn start(&mut self, ctx: &Context, input : &super::InputState){
-    pub fn start(&mut self){
+    pub fn start(&mut self, ctx: &Context, input : &InputState){
         self.active = true;
         //
         for a in &mut self.actors{
             a.visible = true;
-        }            
-        return;
+        }                    
         //..
-        // for a in &mut self.actors{
-        //     for effs in self.start_effects.get_mut(&a.id){
-        //         for e in effs{
-        //             e.on_actor(a, ctx, input );
-        //         }
-        //     }
-        // }
-        // self.start_effects.clear();
+        for a in &mut self.actors{
+            for effs in self.start_effects.get_mut(&a.id){
+                for e in effs{
+                    e.on_actor(a, ctx, input );
+                }
+            }
+        }
+        self.start_effects.clear();
     }
 
-    fn stop(&mut self){
+    pub fn stop(&mut self){
         self.active = false;
         self.actors.clear();
         self.effects.clear();
+    }
+
+    pub fn get_camera_actor(&self) -> &super::actors::Actor {
+        self.get_actor(&self.camera_atr_id).unwrap()     
     }
 
     fn get_player_actor(&self) -> &super::actors::Actor {
         self.get_actor(&self.player_atr_id).unwrap()     
     }
 
-    fn get_actor(&self, id : &Id) -> Option::<&super::actors::Actor> {
+    pub fn get_actor(&self, id : &Id) -> Option::<&super::actors::Actor> {
         for a in &self.actors{
             if a.id == *id {
                 return Some(a);
@@ -130,8 +138,8 @@ impl World{
         
     }
 
-    fn update(&mut self, ctx: &Context, input : &super::InputState ) -> WorldChange {
-        self.process_collisions();
+    pub fn update(&mut self, ctx: &Context, input : &InputState ) -> WorldChange {
+        // self.process_collisions();
 
         let mut default_wc = WorldChange {
             score: 0,
@@ -221,6 +229,18 @@ impl WorldBuilder{
         self.w.camera_atr_id.clone()        
     }
 
+    fn add_default_camera(&mut self)  {
+        if self.w.camera_atr_id == no_id(){
+            let camera_start = Position{ x:0 as f32, y:0 as f32};
+            let camera_id = self.add_camera();    
+            let eff = effect::Effect::PlaceActor{actor_id:camera_id, position: camera_start};
+            self.add_effect_to_actor(&camera_id, eff, true);
+            self.w.camera_atr_id =camera_id;
+        }
+    }
+
+    
+
     fn add_antagonist(&mut self, max_size : f32) -> Id {
         let mut a = super::actors::Actor::new(super::actors::ActorType::Foreground, get_id());   
         return self.add_rect_type(a, max_size, color::random_foreground_color());
@@ -228,7 +248,7 @@ impl WorldBuilder{
 
     fn add_background(&mut self, max_size : f32) -> Id {
         let mut a = super::actors::Actor::new(super::actors::ActorType::Background, get_id());     
-        return self.add_rect_type(a, max_size, color::GREEN);        
+        return self.add_rect_type(a, max_size, color::random_grey_color());        
     }
 
     fn add_terrain(&mut self, renderer: &mut render::Renderer, ctx : &mut Context) -> Id {
@@ -253,6 +273,10 @@ impl WorldBuilder{
     }
 
     fn build(self) -> World{
+
+
+        
+
         self.w
     }
 }
@@ -260,8 +284,9 @@ impl WorldBuilder{
 type LevelLoader = fn(&Level, Position, &mut render::Renderer, &mut Context) -> World;
 
 
+#[derive(Clone)]
 pub struct Level{
-    id         : Id,
+    pub id         : Id,
     name       : String,
     transitions: HashMap::<String, Id>,
     pub loader     : LevelLoader,    
@@ -303,8 +328,10 @@ pub fn introload(level : &Level, center : Position, renderer: &mut render::Rende
 
     let id = wb.add_text("Pulsar 3".to_string(), text::title_style(),true);     
     wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string()), false );
-    wb.get_mut_actor(&id).unwrap().transform = center;        
-
+    wb.get_mut_actor(&id).unwrap().transform = center;      
+    
+   
+    wb.add_default_camera();
     wb.build()
 } 
 
@@ -316,6 +343,7 @@ pub fn tutoload(level : &Level, center : Position, renderer: &mut render::Render
     wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string()), false );
     wb.get_mut_actor(&id).unwrap().transform = center;        
 
+    wb.add_default_camera();
     wb.build()
 }
 
@@ -326,6 +354,7 @@ pub fn gameoverload(level : &Level, center : Position, renderer: &mut render::Re
     wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string()), false );
     wb.get_mut_actor(&id).unwrap().transform = center;        
 
+    wb.add_default_camera();
     wb.build()
 } 
 
@@ -336,6 +365,7 @@ pub fn victoryload(level : &Level, center : Position, renderer: &mut render::Ren
     wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string()), false );
     wb.get_mut_actor(&id).unwrap().transform = center;        
 
+    wb.add_default_camera();
     wb.build()
 } 
 
@@ -343,15 +373,15 @@ pub fn playload(level : &Level, center : Position, renderer: &mut render::Render
     let mut wb = WorldBuilder::new(level.name.clone());
     wb.set_size(Size{x:1000.0, y:640.0});
 
-    wb.add_terrain(renderer, ctx);
+    // wb.add_terrain(renderer, ctx);
     let max_size = 50.0;
-    for _ in 0..1000{
+    for _ in 0..10000{
         wb.add_background(max_size);
     }
-    wb.add_terrain(renderer, ctx);
+    // wb.add_terrain(renderer, ctx);
     
     // let sound_idx = wb.add_sound("/Randomize6.wav".to_string(), &mut ctx);
-    for _ in 0..1000{
+    for _ in 0..100{
         let id = wb.add_antagonist(max_size);
         wb.add_effect_to_actor(&id, effect::Effect::ResetActor{actor_id : id.clone()}, true);
         let a = wb.get_mut_actor(&id).unwrap();
@@ -370,10 +400,11 @@ pub fn playload(level : &Level, center : Position, renderer: &mut render::Render
 
     let camera_start = Position{ x:0 as f32, y:0 as f32};
     let camera_id = wb.add_camera();
-    let eff = effect::Effect::MoveActor{actor_id:camera_id, vector:Position{x :1.0, y:0.0}};
+    let eff = effect::Effect::MoveActor{actor_id:camera_id, vector:Position{x :-1.0, y:0.0}};
     wb.add_effect_to_actor(&camera_id, eff, false);
     let eff = effect::Effect::PlaceActor{actor_id:camera_id, position: camera_start};
     wb.add_effect_to_actor(&camera_id, eff, true);
+    wb.w.camera_atr_id =camera_id;
 
     let text_id  = wb.add_text("Pulsar 3".to_string(), text::ui_style(), true);
     wb.get_mut_actor(&text_id).unwrap().transform = Position{x: 10.0, y: 10.0};    

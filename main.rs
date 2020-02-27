@@ -38,7 +38,7 @@ mod terrain;
 /// the user's input state so that we turn keyboard events into something
 /// state-based and device-independent.
 /// **********************************************************************
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct InputState {
     pub xaxis: f32,
     pub yaxis: f32,
@@ -145,7 +145,7 @@ pub struct App {
     current_scene : Id,  
     last_scene_change: f32,
     levels : Vec::<level::Level>,
-    worlds : Vec::<level::World>
+    worlds : level::World,
 }
 
 
@@ -173,9 +173,16 @@ fn connect_levels(app : &mut App, ctx: &mut Context){
     app.levels.push(gameover);
     app.levels.push(victory);
     app.levels.push(play);
-    let mut w = app.levels[4].load(&mut app.renderer, ctx);
-    w.start();
-    app.worlds.push(w);
+    let mut w = app.levels[0].load(&mut app.renderer, ctx);
+
+    if let Some(p) = app.player.as_ref(){
+        // let input = &app.player.as_ref().unwrap().input.clone();
+
+        w.start(ctx, &p.input);
+        app.worlds = w;
+    }
+
+    
 }
 
 impl App {
@@ -205,11 +212,20 @@ impl App {
             current_scene : no_id(),
             last_scene_change : 0.0,
             levels : Vec::<level::Level>::new(),
-            worlds : Vec::<level::World>::new()
+            worlds : level::World::empty()
         };
 
         a.renderer.fonts = fonts;
         a
+    }
+
+    fn find_level(&self, id : &Id) -> Option::<&level::Level> {
+        for a in &self.levels{
+            if a.id == *id {
+                return Some(a);
+            }
+        }
+        None
     }
 
     fn start(&mut self){        
@@ -443,12 +459,12 @@ impl App {
     }
 }
 
-fn player_handle_input(p: &Player, pa : &mut actors::Actor) {
+fn player_handle_input(input : &InputState, pa : &mut actors::Actor) {
 
     const MOVE_STEP : f32 = -10.0;    
     
-    let movex = p.input.xaxis * -MOVE_STEP;
-    let movey = p.input.yaxis * MOVE_STEP;
+    let movex = input.xaxis * -MOVE_STEP;
+    let movey = input.yaxis * MOVE_STEP;
         
     pa.transform.x += movex;
     pa.transform.y += movey;
@@ -459,6 +475,23 @@ impl EventHandler for App {
 
 
     fn update(&mut self, _ctx: &mut Context) -> GameResult<()> {
+
+        if let Some(p) = self.player.as_ref(){
+            let input = &self.player.as_ref().unwrap().input.clone();
+            let wc = self.worlds.update(_ctx, &p.input);
+            if let Some(level_id) = wc.level{
+                self.worlds.stop();
+               
+                let level = (*self.find_level(&level_id).unwrap()).clone();
+                self.worlds = level.load(&mut self.renderer, _ctx);
+                self.worlds.start(_ctx, input) 
+                
+                
+            }
+            
+        }
+        return Ok(());
+
         if !self.started{
             self.start();   
         }
@@ -517,7 +550,9 @@ impl EventHandler for App {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
 
-        let t = self.actors[&self.camera.actor_id].transform;
+
+        let t = self.worlds.get_camera_actor().transform;
+        // let t = self.actors[&self.camera.actor_id].transform;
         self.renderer.start_frame(ctx, t);
             
         self.renderer.start_batch();
@@ -528,7 +563,7 @@ impl EventHandler for App {
         self.renderer.push_cam_transform(ctx);
 
         // for a in self.actors.values() {
-        for a in &self.worlds[0].actors {
+        for a in &self.worlds.actors {
             if !a.visible {
                 continue;
             }
@@ -559,7 +594,7 @@ impl EventHandler for App {
 
         let mut draw_ctx = actors::DrawContext::WorldSpace;              
         self.renderer.pop_cam_transform(ctx);
-        for a in self.actors.values() {
+        for a in &self.worlds.actors {
             if !a.visible {
                 continue;
             }
@@ -664,9 +699,9 @@ fn main() {
 
 
     let intro_scene_idx = app.create_scene("intro".to_string());    
-    let text_id = app.add_text("Pulsar 3".to_string(), text::title_style(), true, &intro_scene_idx, true);
-    let a = app.actors.get_mut(&text_id).unwrap();
-    a.transform = center;
+    // let text_id = app.add_text("Pulsar 3".to_string(), text::title_style(), true, &intro_scene_idx, true);
+    // let a = app.actors.get_mut(&text_id).unwrap();
+    // a.transform = center;
 
     let tutorial_idx = app.create_scene("intro".to_string());    {
         let tuto_text = "Catch the yellow blocks and\n exit with the green one.".to_string();
@@ -743,9 +778,9 @@ fn main() {
     }
 
     {
-        let s = app.get_mut_scene(&intro_scene_idx);
-        let auto_transition = effect::Effect::AutoNextScene{duration:3.0, cur_scene_idx : intro_scene_idx, next_scene_idx : tutorial_idx};        
-        s.effects.push( auto_transition );
+        // let s = app.get_mut_scene(&intro_scene_idx);
+        // let auto_transition = effect::Effect::AutoNextScene{duration:3.0, cur_scene_idx : intro_scene_idx, next_scene_idx : tutorial_idx};        
+        // s.effects.push( auto_transition );
     }
     {
         let s = app.get_mut_scene(&tutorial_idx);
@@ -765,6 +800,8 @@ fn main() {
     }
 
     app.current_scene = intro_scene_idx;
+
+    connect_levels(&mut app, &mut ctx);
           
 
     // Run!

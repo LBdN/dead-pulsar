@@ -6,6 +6,7 @@ use crate::InputState;
 use crate::color;
 use crate::actors;
 use crate::level;
+use ggez::timer;
 
 use ggez::audio::{SoundSource};
 use ggez::{Context};
@@ -59,7 +60,7 @@ impl Effect{
                 if let Some(pa) = app.player.as_mut(){            
                     if let Some(player_actor) = app.actors.get_mut(&pa.actor_id){                        
                         //processing input
-                        player_handle_input(&pa, player_actor);
+                        player_handle_input(&pa.input, player_actor);
                     }
                 }
                 return false;
@@ -111,12 +112,39 @@ impl Effect{
         }        
     } 
 
-    pub fn on_actor(&self, _actor : &mut actors::Actor, _ctx: &Context, _input : &InputState) -> Option::<level::WorldChange>{
+    pub fn on_actor(&mut self, _actor : &mut actors::Actor, _ctx: &Context, _input : &InputState) -> Option::<level::WorldChange>{
         // level::WorldChange {
         //     score: 0,
         //     level: None
         // }
-        None
+        match self {
+            Effect::AutoNextScene{duration, cur_scene_idx, next_scene_idx} => {
+                *duration -= timer::delta(_ctx).as_secs_f32();
+                if *duration < 0.0 {
+                    let levelchange = level::WorldChange {
+                        score: 0,
+                        level: Some(next_scene_idx.clone())
+                    };
+                    return Some(levelchange);                
+                }
+                None                
+            },
+            Effect::ProcessInput => {                
+                player_handle_input(_input, _actor);
+                None
+            },
+            Effect::MoveActor{actor_id, vector} => {                
+                _actor.transform.x += vector.x;
+                _actor.transform.y += vector.y;                                    
+                None
+            },
+            Effect::PlaceActor{actor_id, position} => {                
+                _actor.transform = *position;
+                None
+            },
+            _ => None
+        }
+        
     }
 }
 

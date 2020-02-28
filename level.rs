@@ -9,14 +9,14 @@ use crate::color;
 use crate::terrain;
 use crate::render;
 use crate::InputState;
+use crate::actors;
 
-
-fn random_rect(maxsize : f32, world_size : &Size) -> (f32, f32, Size) {
+fn random_rect(maxsize : f32, world_size : &Size) -> (Position, Size) {
     let mut rng = rand::thread_rng();
     let x    = rng.gen_range(0.0, world_size.x) as f32;
     let y    = rng.gen_range(0.0, world_size.y) as f32;
     let size = rng.gen_range(0.0, maxsize) as f32;            
-    (x, y, Size{x:size, y:size})
+    (Position{x:x, y:y}, Size{x:size, y:size})
 }
 
 pub struct WorldChange{
@@ -63,7 +63,7 @@ impl World{
         self.active = true;
         //
         for a in &mut self.actors{
-            a.visible = true;
+            a.start();
         }                    
         //..
         for a in &mut self.actors{
@@ -109,7 +109,9 @@ impl World{
     }
 
     fn process_collisions(&mut self){
-
+        if self.player_atr_id == no_id(){
+            return;
+        }
         
         let player_actor = self.get_player_actor(); 
         let size1      = player_actor.collision.get_size();
@@ -139,7 +141,7 @@ impl World{
     }
 
     pub fn update(&mut self, ctx: &Context, input : &InputState ) -> WorldChange {
-        // self.process_collisions();
+        self.process_collisions();
 
         let mut default_wc = WorldChange {
             score: 0,
@@ -197,10 +199,16 @@ impl WorldBuilder{
         a.collision = super::actors::Collision::RectCollision { width: size.x, height: size.y };
     }
 
-    fn add_rect_type(&mut self, mut a :  super::actors::Actor, max_size : f32, color : Color) -> Id {
-        let (x, y, size) = random_rect(max_size, &self.w.size);
+    fn add_to_world(&mut self, a : actors::Actor) -> Id{
+        let atr_id = a.id.clone();
+        self.w.actors.push(a);        
+        atr_id
+    }
 
-        a.transform = Position{ x:x, y:y};
+    fn add_rect_type(&mut self, mut a :  super::actors::Actor, max_size : f32, color : Color) -> Id {
+        let (pos, size) = random_rect(max_size, &self.w.size);
+
+        a.transform = pos;
         self.add_rect_to_actor(&mut a, size, color);
         let atr_id = a.id.clone();
         self.w.actors.push(a);        
@@ -242,12 +250,12 @@ impl WorldBuilder{
     
 
     fn add_antagonist(&mut self, max_size : f32) -> Id {
-        let mut a = super::actors::Actor::new(super::actors::ActorType::Foreground, get_id());   
+        let a = super::actors::Actor::new(super::actors::ActorType::Foreground, get_id());   
         return self.add_rect_type(a, max_size, color::random_foreground_color());
     }
 
     fn add_background(&mut self, max_size : f32) -> Id {
-        let mut a = super::actors::Actor::new(super::actors::ActorType::Background, get_id());     
+        let a = super::actors::Actor::new(super::actors::ActorType::Background, get_id());     
         return self.add_rect_type(a, max_size, color::random_grey_color());        
     }
 
@@ -373,12 +381,19 @@ pub fn playload(level : &Level, center : Position, renderer: &mut render::Render
     let mut wb = WorldBuilder::new(level.name.clone());
     wb.set_size(Size{x:1000.0, y:640.0});
 
-    // wb.add_terrain(renderer, ctx);
+    // background.
+    let mut a = actors::ActorType::Background.make();
+    let mut mb = render::MeshBuilderOps::new();    
     let max_size = 50.0;
     for _ in 0..10000{
-        wb.add_background(max_size);
+        let r = random_rect(max_size, &wb.w.size);
+        mb = mb.rect(&r.0, &r.1, color::random_grey_color());
     }
-    // wb.add_terrain(renderer, ctx);
+    let pts = terrain::build_terrain(wb.w.size, wb.w.size.x / 10.0);        
+    mb = mb.polygon(pts, color::MARROON);    
+    let drawable = mb.build(renderer, ctx);
+    a.drawable = drawable;
+    wb.add_to_world(a);
     
     // let sound_idx = wb.add_sound("/Randomize6.wav".to_string(), &mut ctx);
     for _ in 0..100{

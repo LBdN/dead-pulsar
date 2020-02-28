@@ -53,11 +53,48 @@ impl Renderer{
     pub fn build_mesh(&mut self, pts : Vec::<Position>, color: Color, ctx: &mut Context) -> Renderable{
         let mut mb = graphics::MeshBuilder::new();
         let _ = mb.polygon(DrawMode::fill(), &pts, color);
+
         let mesh = mb.build(ctx).unwrap();
         self.meshes.push(mesh);
         Renderable::StaticRect( self.meshes.len() - 1)
     }
 }
+
+pub struct MeshBuilderOps{
+    mb : graphics::MeshBuilder,
+}
+
+impl MeshBuilderOps{
+    pub fn new() -> MeshBuilderOps{
+        MeshBuilderOps{
+            mb: graphics::MeshBuilder::new()
+        }
+    }
+
+    pub fn polygon(mut self, pts : Vec::<Position>, color: Color) -> MeshBuilderOps{
+        let _ = self.mb.polygon(DrawMode::fill(), &pts, color);
+        self
+    }
+
+    pub fn rect(mut self, pos : &Position, size: &Size, color1: Color) -> MeshBuilderOps {
+        let _ = self.mb.rectangle(
+            DrawMode::fill(),
+            Rect {x:pos.x, y:pos.y, w:size.x, h:size.y},
+            color1
+        );
+        self
+    }
+
+    pub fn build(self, renderer  : &mut Renderer, ctx : &mut Context) -> Renderable {
+        let mesh = self.mb.build(ctx).unwrap();
+        renderer.meshes.push(mesh);
+        Renderable::StaticRect( renderer.meshes.len() - 1)
+    }
+}
+
+
+
+
 
 pub enum TextRenderState{
     Dirty,    

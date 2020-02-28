@@ -59,6 +59,12 @@ pub enum ActorType {
     Camera
 }
 
+impl ActorType{
+    pub fn make(self) -> Actor {
+        Actor::new(self, unit::get_id())
+    }
+}
+
 pub struct Actor {
     pub atype      : ActorType,
     pub id         : unit::Id,
@@ -89,11 +95,11 @@ impl Actor {
             //==
             transform: unit::Position{ x:0.0, y:0.0},
             //==
-            drawable : render::Renderable::StaticRect(0),
+            drawable : render::Renderable::NoDraw,
             drawctx  : DrawContext::WorldSpace,
             visible  : false,
             //==
-            collision    : Collision::DiscCollision(0.0),
+            collision    : Collision::NoCollision,
             on_collision : Vec::<Effect>::new(),
             //==
             on_start  : Vec::<Effect>::new(),
@@ -102,8 +108,21 @@ impl Actor {
         }
     }
 
-    pub fn start(&mut self){        
-        self.ticking = true;        
+    pub fn start(&mut self){      
+        match self.atype{
+            ActorType::Player => {
+                self.visible = true;
+                self.ticking = true;
+            },
+            ActorType::Foreground => {
+                self.visible = true;
+                self.ticking = true;
+            }
+            _ => {
+                self.visible = true;
+                self.ticking = false;
+            }
+        }                
     }
 
     pub fn stop(&mut self){
@@ -128,3 +147,4 @@ impl Actor {
         }        
     }
 }
+

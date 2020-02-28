@@ -112,11 +112,7 @@ impl Effect{
         }        
     } 
 
-    pub fn on_actor(&mut self, _actor : &mut actors::Actor, _ctx: &Context, _input : &InputState) -> Option::<level::WorldChange>{
-        // level::WorldChange {
-        //     score: 0,
-        //     level: None
-        // }
+    pub fn on_actor(&mut self, _actor : &mut actors::Actor, _ctx: &Context, _input : &InputState) -> Option::<level::WorldChange>{        
         match self {
             Effect::AutoNextScene{duration, cur_scene_idx, next_scene_idx} => {
                 *duration -= timer::delta(_ctx).as_secs_f32();
@@ -128,6 +124,13 @@ impl Effect{
                     return Some(levelchange);                
                 }
                 None                
+            },
+            Effect::KillActor{actor_id} => {                
+                if let render::Renderable::DynamicRect{ref mut color, ..} = _actor.drawable {
+                    *color = color::GREEN;
+                }                 
+                _actor.ticking = false;                
+                None
             },
             Effect::ProcessInput => {                
                 player_handle_input(_input, _actor);

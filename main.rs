@@ -490,6 +490,7 @@ impl EventHandler for App {
             }
             
         }
+        println!("FPS: {}", ggez::timer::fps(_ctx));
         return Ok(());
 
         if !self.started{

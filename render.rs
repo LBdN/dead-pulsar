@@ -3,13 +3,21 @@ use ggez::graphics::{DrawParam, Color, Rect, Drawable, DrawMode, Mesh};
 use ggez::{Context, GameResult};
 
 use crate::unit::*;
+use crate::text;
 use std::collections::HashMap;
+
+
+pub struct RenderedText{
+    pub text: graphics::Text, 
+    text_anchor: TextAnchor 
+}
 
 pub struct Renderer{
     pub fonts  : HashMap::<String, graphics::Font>,
     pub mb     : graphics::MeshBuilder,
     pub meshes : Vec::<Mesh>,
-    cam_tr     : super::unit::Position
+    pub texts  : Vec::<RenderedText>,
+    cam_tr     : Position
 }
 
 impl Renderer{
@@ -18,6 +26,7 @@ impl Renderer{
             fonts  : HashMap::<String, graphics::Font>::new(),
             mb     : graphics::MeshBuilder::new(),
             meshes : Vec::<Mesh>::new(),
+            texts  : Vec::<RenderedText>::new(),
             cam_tr : super::unit::Position{x: 0.0, y:0.0}
         } 
     }
@@ -49,14 +58,22 @@ impl Renderer{
     pub fn end_frame(&self, ctx: &mut Context) -> GameResult<()>{
         return graphics::present(ctx);
     }
+    
 
-    pub fn build_mesh(&mut self, pts : Vec::<Position>, color: Color, ctx: &mut Context) -> Renderable{
-        let mut mb = graphics::MeshBuilder::new();
-        let _ = mb.polygon(DrawMode::fill(), &pts, color);
-
-        let mesh = mb.build(ctx).unwrap();
-        self.meshes.push(mesh);
-        Renderable::StaticRect( self.meshes.len() - 1)
+    pub fn convert_to_static_text(&mut self, drawable : &Renderable) -> Renderable {
+        if let Renderable::DynamicTextDraw{string, fontstyle, text_anchor} = drawable{
+            let font = self.fonts[&fontstyle.name];
+            let gtext = graphics::Text::new((string.clone(), font, fontstyle.size));        
+            let d = RenderedText{ text: gtext, text_anchor : *text_anchor };
+            self.texts.push(d);
+            return Renderable::StaticText(self.texts.len() -1 );
+        };
+        Renderable::NoDraw
+        // let font    = self.renderer.fonts[&fontstyle.name];
+        // let gtext   = graphics::Text::new((text.clone(), font, fontstyle.size));        
+        // if static_{                        
+        //     let text_anchor = if centered  {render::TextAnchor::Center} else {render::TextAnchor::TopLeft};
+        //     a.drawable  = render::Renderable::StaticText{ text: gtext, text_anchor : text_anchor };            
     }
 }
 
@@ -88,7 +105,7 @@ impl MeshBuilderOps{
     pub fn build(self, renderer  : &mut Renderer, ctx : &mut Context) -> Renderable {
         let mesh = self.mb.build(ctx).unwrap();
         renderer.meshes.push(mesh);
-        Renderable::StaticRect( renderer.meshes.len() - 1)
+        Renderable::StaticMesh( renderer.meshes.len() - 1)
     }
 }
 
@@ -101,6 +118,7 @@ pub enum TextRenderState{
     TextState(graphics::Text),
 }
 
+#[derive(Copy, Clone)]
 pub enum TextAnchor{
     Center,
     TopLeft
@@ -108,10 +126,10 @@ pub enum TextAnchor{
 
 pub enum Renderable{
     NoDraw,
-    StaticRect(usize),
-    DynamicRect{ color : Color, size : super::unit::Size},
-    StaticText{text: graphics::Text, text_anchor: TextAnchor },
-    DynamicTextDraw { string: String, fontstyle : super::text::FontStyle},
+    StaticMesh(usize),
+    StaticText(usize),
+    DynamicRect{ color : Color, size : Size},    
+    DynamicTextDraw { string: String, fontstyle : text::FontStyle, text_anchor : TextAnchor},
     
 }
 
@@ -119,8 +137,17 @@ impl Renderable {
     pub fn draw(&self, transform : super::unit::Position, renderer : &mut Renderer, ctx : &mut Context){
         match self {
             Renderable::NoDraw => (),
-            Renderable::StaticRect(idx) => {
+            Renderable::StaticMesh(idx) => {
                 let _ = renderer.meshes[*idx].draw(ctx, DrawParam::default().dest(transform));    
+            },
+            Renderable::StaticText(idx) => {
+                let rtext = &renderer.texts[*idx];
+                let mut t =  transform.clone();
+                if let TextAnchor::Center = rtext.text_anchor {
+                    t.x -= rtext.text.width(ctx) as f32 / 2.0;
+                    t.y -= rtext.text.height(ctx) as f32;
+                }                
+                let _ = rtext.text.draw(ctx, DrawParam::default().dest(t));
             },
             Renderable::DynamicRect{color, size} => {
                 renderer.mb.rectangle(
@@ -133,21 +160,15 @@ impl Renderable {
                     },
                     *color,
                 );
-            },
-            Renderable::StaticText{text, text_anchor} =>{
+            },                  
+            Renderable::DynamicTextDraw{string, fontstyle, text_anchor } => {
+                let font = renderer.fonts[&fontstyle.name];
+                let text = graphics::Text::new( (string.clone() , font, fontstyle.size) );                
                 let mut t =  transform.clone();
                 if let TextAnchor::Center = text_anchor {
                     t.x -= text.width(ctx) as f32 / 2.0;
                     t.y -= text.height(ctx) as f32;
-                }                
-                let _ = text.draw(ctx, DrawParam::default().dest(t));
-            },                        
-            Renderable::DynamicTextDraw{string, fontstyle} => {
-                let font = renderer.fonts[&fontstyle.name];
-                let text = graphics::Text::new( (string.clone() , font, fontstyle.size) );                
-                let t =  transform.clone();
-                // t.x -= text.width(ctx) as f32 / 2.0;
-                // t.y -= text.height(ctx) as f32 / 2.0;
+                }   
                 let _ = text.draw(ctx, DrawParam::default().dest(t).color(fontstyle.color));
             }            
         } 

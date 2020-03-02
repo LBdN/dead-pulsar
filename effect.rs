@@ -3,6 +3,7 @@ use crate::unit::*;
 use crate::render;
 use crate::player_handle_input;
 use crate::InputState;
+use crate::GameState;
 use crate::color;
 use crate::actors;
 use crate::level;
@@ -36,7 +37,7 @@ impl Effect{
                 return false;
             },
             Effect::UpdateScore{actor_id} => {
-                if let Some(pa) = app.player.as_mut(){                    
+                if let Some(pa) = app.state.as_mut(){                    
                     if let Some(label_actor) = app.actors.get_mut(actor_id){ 
                         if let render::Renderable::DynamicTextDraw{string, ..} = &mut label_actor.drawable{
                             *string = format!( "Score: {}", pa.score);
@@ -46,7 +47,7 @@ impl Effect{
                 return false;
             },
             Effect::SetScore{new_value} => {
-                if let Some(pa) = app.player.as_mut(){                    
+                if let Some(pa) = app.state.as_mut(){                    
                         pa.score = *new_value;
                 }
                 return false;
@@ -57,7 +58,7 @@ impl Effect{
                 true
             },
             Effect::ProcessInput => {
-                if let Some(pa) = app.player.as_mut(){            
+                if let Some(pa) = app.state.as_mut(){            
                     if let Some(player_actor) = app.actors.get_mut(&pa.actor_id){                        
                         //processing input
                         player_handle_input(&pa.input, player_actor);
@@ -112,7 +113,7 @@ impl Effect{
         }        
     } 
 
-    pub fn on_actor(&mut self, _actor : &mut actors::Actor, _ctx: &Context, _input : &InputState) -> Option::<level::WorldChange>{        
+    pub fn on_actor(&mut self, _actor : &mut actors::Actor, _ctx: &Context, state : &GameState) -> Option::<level::WorldChange>{        
         match self {
             Effect::AutoNextScene{duration, cur_scene_idx, next_scene_idx} => {
                 *duration -= timer::delta(_ctx).as_secs_f32();
@@ -129,11 +130,15 @@ impl Effect{
                 if let render::Renderable::DynamicRect{ref mut color, ..} = _actor.drawable {
                     *color = color::GREEN;
                 }                 
-                _actor.ticking = false;                
-                None
+                _actor.ticking = false;       
+                _actor.collision = actors::Collision::NoCollision;         
+                Some(level::WorldChange {
+                    score: state.score as u32+1,
+                    level: None
+                })
             },
             Effect::ProcessInput => {                
-                player_handle_input(_input, _actor);
+                player_handle_input(&state.input, _actor);
                 None
             },
             Effect::MoveActor{actor_id, vector} => {                
@@ -143,6 +148,12 @@ impl Effect{
             },
             Effect::PlaceActor{actor_id, position} => {                
                 _actor.transform = *position;
+                None
+            },
+            Effect::UpdateScore{actor_id} => {                                    
+                if let render::Renderable::DynamicTextDraw{string, ..} = &mut _actor.drawable{
+                    *string = format!( "Score: {}", state.score);
+                }
                 None
             },
             _ => None

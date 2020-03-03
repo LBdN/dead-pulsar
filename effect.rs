@@ -120,7 +120,8 @@ impl Effect{
                 if *duration < 0.0 {
                     let levelchange = level::WorldChange {
                         score: 0,
-                        level: Some(next_scene_idx.clone())
+                        level: Some(next_scene_idx.clone()),
+                        dead_effect: false
                     };
                     return Some(levelchange);                
                 }
@@ -133,8 +134,9 @@ impl Effect{
                 _actor.ticking = false;       
                 _actor.collision = actors::Collision::NoCollision;         
                 Some(level::WorldChange {
-                    score: state.score as u32+1,
-                    level: None
+                    score: 1,
+                    level: None,
+                    dead_effect: true
                 })
             },
             Effect::ProcessInput => {                

@@ -486,7 +486,7 @@ impl EventHandler for App {
         }
 
         if let Some(state) = self.state.as_mut(){
-            state.score = wc.score as i32;
+            state.score += wc.score as i32;
         }
             
         if let Some(level_id) = wc.level{

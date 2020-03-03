@@ -21,14 +21,16 @@ fn random_rect(maxsize : f32, world_size : &Size) -> (Position, Size) {
 
 pub struct WorldChange{
     pub score : u32,
-    pub level : Option::<Id>
+    pub level : Option::<Id>,
+    pub dead_effect : bool
 }
 
 impl WorldChange{
     pub fn default() -> WorldChange{
         WorldChange{
             score:0,
-            level: None
+            level: None,
+            dead_effect: false
         }
     }
 }
@@ -152,23 +154,29 @@ impl World{
     pub fn update(&mut self, ctx: &Context, state : &GameState ) -> WorldChange {
         self.process_collisions();
 
-        let mut default_wc = WorldChange {
-            score: 0,
-            level: None
-        };
+        let mut default_wc = WorldChange::default();
 
         for a in &mut self.actors{
+            let mut eff_to_remove = Vec::<usize>::new();
             for effs in self.effects.get_mut(&a.id){
-                for e in effs{
+                
+                for (i, e) in effs.iter_mut().enumerate(){
                     if let Some(wc) = e.on_actor(a, ctx, state ){
                         if let Some(_) = wc.level{
                             return wc;
                         } else{
                             default_wc.score += wc.score;
                         }
+                        if wc.dead_effect{
+                            eff_to_remove.push(i);
+                        }
                     }
                 }
-            }
+
+                for i in eff_to_remove.iter().rev(){
+                    effs.remove(*i);
+                }
+            }                       
         }
         default_wc   
     }

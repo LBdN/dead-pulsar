@@ -428,7 +428,7 @@ pub fn playload(level : &Level, center : Position, renderer: &mut render::Render
             mb = mb.rect(&r.0, &r.1, color::random_grey_color());
         }
 
-        let b1 = Bounds{min: Size{x:0.0, y:0.0}, max: wb.w.size};
+        let b1 = Bounds{min: Size{x:0.0, y:200.0}, max: wb.w.size};
         let mut pts = terrain::build_terrain(&b1, wb.w.size.x / 10.0);
         terrain::invert_pos(&wb.w.size, &mut pts);
         mb = mb.polygon(pts, color::MARROON);    
@@ -436,7 +436,7 @@ pub fn playload(level : &Level, center : Position, renderer: &mut render::Render
         let mut pts = terrain::build_terrain(&b2, wb.w.size.x / 10.0);        
         terrain::invert_pos(&wb.w.size, &mut pts);
         mb = mb.polygon(pts, color::GREY);    
-        let b3 = Bounds{min: Size{x:0.0, y:200.0}, max: wb.w.size};
+        let b3 = Bounds{min: Size{x:0.0, y:00.0}, max: wb.w.size};
         let mut pts = terrain::build_terrain(&b3, wb.w.size.x / 10.0);        
         terrain::invert_pos(&wb.w.size, &mut pts);
         mb = mb.polygon(pts, color::RED);   

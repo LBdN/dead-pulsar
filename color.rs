@@ -18,3 +18,14 @@ pub fn random_grey_color() -> Color{
     let r       = rng.gen_range(0.1, 0.5);
     Color{r:r, g:r, b:r, a:1.0}
 }
+
+pub fn fade_to_transparent(nbsteps: i32, color : &Color) -> Vec::<Color> {
+    let mut colors = Vec::<Color>::new();
+    let step_size = color.a / nbsteps as f32;    
+    for i in 0..nbsteps{
+        let mut c = color.clone();
+        c.a -= (i as f32)*step_size;
+        colors.push(c);
+    }
+    colors
+}

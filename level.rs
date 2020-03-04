@@ -19,6 +19,11 @@ fn random_rect(maxsize : f32, world_size : &Size) -> (Position, Size) {
     (Position{x:x, y:y}, Size{x:size, y:size})
 }
 
+pub struct WorldBounds{
+    pub min: Size,
+    pub max: Size
+}
+
 pub struct WorldChange{
     pub score : u32,
     pub level : Option::<Id>,
@@ -46,7 +51,7 @@ pub struct World{
     //
     active        : bool,
     pub name          : String,
-    size          : Size
+    pub size          : Size
 
 }
 
@@ -73,6 +78,7 @@ impl World{
     pub fn start(&mut self, ctx: &Context, state : &GameState){
         self.active = true;
         //
+        let wb = WorldBounds{min: self.get_camera_actor().transform, max:self.size};
         for a in &mut self.actors{
             a.start();
         }                    
@@ -80,7 +86,7 @@ impl World{
         for a in &mut self.actors{
             for effs in self.start_effects.get_mut(&a.id){
                 for e in effs{
-                    e.on_actor(a, ctx, state );
+                    e.on_actor(a, ctx, state, &wb );
                 }
             }
         }
@@ -93,15 +99,15 @@ impl World{
         self.effects.clear();
     }
 
-    pub fn get_camera_actor(&self) -> &super::actors::Actor {
+    pub fn get_camera_actor(&self) -> &actors::Actor {
         self.get_actor(&self.camera_atr_id).unwrap()     
     }
 
-    fn get_player_actor(&self) -> &super::actors::Actor {
+    fn get_player_actor(&self) -> &actors::Actor {
         self.get_actor(&self.player_atr_id).unwrap()     
     }
 
-    pub fn get_actor(&self, id : &Id) -> Option::<&super::actors::Actor> {
+    pub fn get_actor(&self, id : &Id) -> Option::<&actors::Actor> {
         for a in &self.actors{
             if a.id == *id {
                 return Some(a);
@@ -110,7 +116,7 @@ impl World{
         None
     }
 
-    fn get_mut_actor(&mut self, id : &Id) -> Option::<&mut super::actors::Actor> {
+    fn get_mut_actor(&mut self, id : &Id) -> Option::<&mut actors::Actor> {
         for a in &mut self.actors{
             if a.id == *id {
                 return Some(a);
@@ -155,13 +161,13 @@ impl World{
         self.process_collisions();
 
         let mut default_wc = WorldChange::default();
-
+        let wb = WorldBounds{min: opposite_pos(&self.get_camera_actor().transform), max:self.size};
         for a in &mut self.actors{
             let mut eff_to_remove = Vec::<usize>::new();
             for effs in self.effects.get_mut(&a.id){
                 
                 for (i, e) in effs.iter_mut().enumerate(){
-                    if let Some(wc) = e.on_actor(a, ctx, state ){
+                    if let Some(wc) = e.on_actor(a, ctx, state, &wb ){
                         if let Some(_) = wc.level{
                             return wc;
                         } else{
@@ -410,7 +416,7 @@ pub fn victoryload(level : &Level, center : Position, renderer: &mut render::Ren
 
 pub fn playload(level : &Level, center : Position, renderer: &mut render::Renderer, ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
-    wb.set_size(Size{x:1000.0, y:640.0});
+    wb.set_size(Size{x:1000.0, y:600.0});
 
     // BACKGROUND.
     {
@@ -421,8 +427,20 @@ pub fn playload(level : &Level, center : Position, renderer: &mut render::Render
             let r = random_rect(max_size, &wb.w.size);
             mb = mb.rect(&r.0, &r.1, color::random_grey_color());
         }
-        let pts = terrain::build_terrain(wb.w.size, wb.w.size.x / 10.0);        
+
+        let b1 = Bounds{min: Size{x:0.0, y:0.0}, max: wb.w.size};
+        let mut pts = terrain::build_terrain(&b1, wb.w.size.x / 10.0);
+        terrain::invert_pos(&wb.w.size, &mut pts);
         mb = mb.polygon(pts, color::MARROON);    
+        let b2 = Bounds{min: Size{x:0.0, y:100.0}, max: wb.w.size};
+        let mut pts = terrain::build_terrain(&b2, wb.w.size.x / 10.0);        
+        terrain::invert_pos(&wb.w.size, &mut pts);
+        mb = mb.polygon(pts, color::GREY);    
+        let b3 = Bounds{min: Size{x:0.0, y:200.0}, max: wb.w.size};
+        let mut pts = terrain::build_terrain(&b3, wb.w.size.x / 10.0);        
+        terrain::invert_pos(&wb.w.size, &mut pts);
+        mb = mb.polygon(pts, color::RED);   
+        
         let drawable = mb.build(renderer, ctx);
         a.drawable = drawable;
         wb.add_to_world(a);

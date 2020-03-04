@@ -5,8 +5,8 @@ pub enum FontWeight{
     // Light,
     // LightItalic,
     Normal,
-    NormalItalic,
-    Bold,
+    // NormalItalic,
+    // Bold,
     // BoldItalic,
 }
 

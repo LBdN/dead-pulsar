@@ -4,8 +4,6 @@ extern crate find_folder;
 use std::env;
 use std::path;
 use std::collections::HashMap;
-use rand;
-use rand::Rng;
 
 use ggez::{Context, ContextBuilder, GameResult};
 use ggez::event::{self, EventHandler, Axis};
@@ -14,8 +12,6 @@ use ggez::input::keyboard::KeyCode;
 use ggez::event::KeyMods;
 use ggez::graphics;
 use ggez::conf;
-use ggez::graphics::{Rect, DrawMode};
-use ggez::graphics::{Color};
 use ggez::timer;
 use ggez::audio;
 
@@ -232,23 +228,23 @@ impl App {
         None
     }
 
-    fn start(&mut self){        
-        self.start_scene();
-        self.started = true;          
-    }
+    // fn start(&mut self){        
+    //     self.start_scene();
+    //     self.started = true;          
+    // }
 
-    fn start_scene(&mut self){
-        let scene_id = self.current_scene.clone();
-        {            
-            let s = self.get_scene(&scene_id);
-            s.clone().start(self);                         
-        }
-        self.last_scene_change = 0.0;     
-        {
-            let s = self.get_mut_scene(&scene_id);
-            s.active = true;
-        }
-    }
+    // fn start_scene(&mut self){
+    //     let scene_id = self.current_scene.clone();
+    //     {            
+    //         let s = self.get_scene(&scene_id);
+    //         s.clone().start(self);                         
+    //     }
+    //     self.last_scene_change = 0.0;     
+    //     {
+    //         let s = self.get_mut_scene(&scene_id);
+    //         s.active = true;
+    //     }
+    // }
 
 
     fn display_status(&self){
@@ -306,164 +302,9 @@ impl App {
         eff_result.scene_changed
         
     }
-
-    
-    fn create_scene(&mut self, name : String) -> Id {
-        let s = Scene::new(name);
-        let id = s.id.clone();
-        self.scenes.insert(id, s);
-        id
-    }
-
-    fn add_sound(&mut self, rel_path : String,  ctx : &mut Context) -> Id{        
-        let sound = audio::Source::new(ctx, rel_path).unwrap();
-        let id = get_id();
-        self.sounds.insert(id, sound);
-        id
-    }
-
-    fn add_camera(&mut self, scene_idx: &Id) -> Id {
-        let mut a = actors::Actor::new(actors::ActorType::Camera, unit::get_id());
-        a.drawable  = render::Renderable::NoDraw;
-        a.collision = actors::Collision::NoCollision;
-        a.transform = unit::Position{ x:0 as f32, y:0 as f32};
-        
-        self.camera.actor_id = self.add_actor(a, scene_idx);
-        self.camera.actor_id
-    }
-
-    fn add_player(&mut self, scene_idx: &Id) ->Id {
-        
-        let size  = unit::Size{x:10.0, y:10.0};
-        
-        let mut a = actors::Actor::new(actors::ActorType::Player, unit::get_id());
-        self.rect_behavior(&mut a, size, color::RED);
-
-        let actor_id = self.add_actor(a, scene_idx);
-        
-        self.state = Some( GameState{
-            score    : 0,
-            actor_id : actor_id,
-            input    : InputState:: default()
-        });
-
-        actor_id
-    }
-
-    fn random_rect(&self, maxsize : f32) -> (f32, f32, unit::Size) {
-        let mut rng = rand::thread_rng();
-        let x    = rng.gen_range(0.0, self.world.size[0]) as f32;
-        let y    = rng.gen_range(0.0, self.world.size[1]) as f32;
-        let size = rng.gen_range(0.0, maxsize) as f32;            
-        (x, y, unit::Size{x:size, y:size})
-    }
-
-    fn rect_behavior(&mut self, a : &mut actors::Actor, size: unit::Size, color : Color){
-        a.drawable = render::Renderable::DynamicRect {
-            color   : color,
-            size    : size,
-        };            
-        a.collision = actors::Collision::RectCollision { width: size.x, height: size.y };
-    }
-
-    fn add_foreground_rects(&mut self, scene_idx: &Id, eff : effect::Effect) -> [Id; 100]{
-        
-        const MAX_SIZE : f32 = 50.0;        
-        let mut indices : [Id; 100] = [no_id();100];
-        for i in 0..100 {
-            let mut a = actors::Actor::new(actors::ActorType::Foreground, unit::get_id());
-  
-            let (x, y, size) = self.random_rect(MAX_SIZE);
-
-            a.transform = unit::Position{ x:x, y:y};
-            self.rect_behavior(&mut a, size, color::random_foreground_color());
-
-            a.on_collision.push(effect::Effect::KillActor{actor_id:a.id.clone()});
-            a.on_collision.push(eff);            
-
-            indices[i] = self.add_actor(a, scene_idx);            
-        }
-        indices
-    }
-
-    fn add_end_rects(&mut self, exit_size : f64, scene_idx: &Id) -> [Id; 3]{
-        
-        let lose_rect_height = (self.world.size[1]- exit_size) / 2.0;
-
-        let mut res : [Id; 3] = [no_id(); 3];
-
-        let mut yy = 0.0;
-        for (i, rect_height) in [lose_rect_height, exit_size, lose_rect_height].iter().enumerate() {
-            let mut a = actors::Actor::new(actors::ActorType::Terrain, unit::get_id());
-            a.transform = unit::Position{ x:self.world.size[0] as f32, y:yy as f32};
-            let size = unit::Size{ x:50 as f32, y:*rect_height as f32 };
-
-            self.rect_behavior(&mut a, size, color::RED);            
-
-            yy += rect_height;
-            res[i] = self.add_actor(a, scene_idx);
-        }
-        
-        res 
-    }
-
-    fn add_background_rects(&mut self, ctx : &mut Context, scene_idx: &Id) -> Id{
-        
-        const MAX_SIZE : f32 = 50.0;
-        
-
-        let mut a = actors::Actor::new(actors::ActorType::Background, unit::get_id());
-
-        let mut mb = graphics::MeshBuilder::new();
-        for _i in 1..10000 {
-            let (x, y, size) = self.random_rect(MAX_SIZE);            
-
-            mb.rectangle(
-                DrawMode::fill(),
-                Rect {x:x, y:y, w:size.x, h:size.y},
-                color::random_grey_color()
-            );
-        }
-        let mesh = mb.build(ctx).unwrap();
-
-        self.renderer.meshes.push(mesh);
-        a.drawable = render::Renderable::StaticMesh( self.renderer.meshes.len() - 1);
-
-        self.add_actor(a, scene_idx)
-    }
-
-    // fn add_text(&mut self, text: String, fontstyle : text::FontStyle, static_:bool, scene_idx: &Id, centered: bool) -> Id{
-    //     let mut a   = actors::Actor::new(actors::ActorType::UI, unit::get_id());
-    //     a.drawctx   = actors::DrawContext::ScreenSpace;
-    //     let font    = self.renderer.fonts[&fontstyle.name];
-    //     let gtext   = graphics::Text::new((text.clone(), font, fontstyle.size));        
-    //     if static_{                        
-    //         let text_anchor = if centered  {render::TextAnchor::Center} else {render::TextAnchor::TopLeft};
-    //         a.drawable  = render::Renderable::StaticText{ text: gtext, text_anchor : text_anchor };            
-    //     } else {
-    //         a.drawable = render::Renderable::DynamicTextDraw{ string: text, fontstyle : fontstyle};
-    //     }        
-    //     self.add_actor(a, scene_idx)
-    // }
-
-    fn add_actor(&mut self, a: actors::Actor, scene_idx: &Id) -> Id {
-        let id = a.id.clone();
-        let s = self.scenes.get_mut(scene_idx).unwrap();        
-        s.actors.push(id);
-        self.actors.insert(id, a);                
-        id
-    }
-
-    fn get_mut_scene(&mut self, scene_idx: &Id) -> &mut Scene{
-        self.scenes.get_mut(scene_idx).unwrap()
-    }
-
-    fn get_scene(&self, scene_idx: &Id) -> &Scene{
-        self.scenes.get(scene_idx).unwrap()
-    }
 }
 
-fn player_handle_input(input : &InputState, pa : &mut actors::Actor) {
+fn player_handle_input(input : &InputState, pa : &mut actors::Actor, worldbounds : &level::WorldBounds) {
 
     const MOVE_STEP : f32 = -10.0;    
     
@@ -472,6 +313,14 @@ fn player_handle_input(input : &InputState, pa : &mut actors::Actor) {
         
     pa.transform.x += movex;
     pa.transform.y += movey;
+
+    let actor_size = pa.collision.get_size();
+    pa.transform.x = pa.transform.x.min(worldbounds.max.x - actor_size.y);
+    pa.transform.y = pa.transform.y.min(worldbounds.max.y - actor_size.x);
+    pa.transform.x = pa.transform.x.max(worldbounds.min.x);
+    pa.transform.y = pa.transform.y.max(worldbounds.min.y);
+
+    // println!("{} {} {} {}", pa.transform.x, worldbounds.min.x, pa.transform.y, worldbounds.max.x);
     
 }
 
@@ -500,61 +349,6 @@ impl EventHandler for App {
         
         println!("FPS: {}", ggez::timer::fps(_ctx));
         return Ok(());
-
-        if !self.started{
-            self.start();   
-        }
-
-        let scene_changed = self.apply_effect(_ctx);
-        if scene_changed {
-            return Ok(());
-        }
-
-
-
-        // Update code here...
-        
-        
-        if let Some(pa) = self.state.as_mut(){                        
-            let mut pos1       = unit::Position{x : 0.0, y: 0.0};
-            let mut collision1 = actors::Collision::DiscCollision(0.0);
-            
-            if let Some(player_actor) = &self.actors.get_mut(&pa.actor_id){            
-                let size1  = player_actor.collision.get_size();
-                pos1       = unit::Position{x : player_actor.transform.x + size1.x/2.0,y : player_actor.transform.y + size1.y/2.0};
-                collision1 = player_actor.collision;
-            }
-                         
-            for a in &mut self.actors.values() {
-                if !a.ticking{
-                    continue;
-                }
-                if let actors::ActorType::Background = a.atype {
-                    continue;
-                }
-                if let actors::ActorType::Player = a.atype {
-                    continue;
-                }
-                if let actors::Collision::NoCollision = a.collision {
-                    continue;
-                }                    
-
-                let size2 = a.collision.get_size();                    
-                let pos2 = unit::Position{x : a.transform.x + size2.x/2.0,y : a.transform.y + size2.y/2.0};
-                
-                if actors::collides(&pos1, &collision1, &pos2, &a.collision){      
-                    pa.score += (1000.0 / (size2.x*size2.y)) as i32;
-                    let s = self.scenes.get_mut(&self.current_scene).unwrap();
-                    s.effects.append(& mut a.on_collision.clone());
-                }
-
-            }
-                
-            
-        }
-        
-        // println!("FPS: {}", ggez::timer::fps(_ctx));
-        Ok(())
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {

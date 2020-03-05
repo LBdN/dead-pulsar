@@ -1,5 +1,5 @@
 use ggez::graphics;
-use ggez::graphics::{DrawParam, Color, Rect, Drawable, DrawMode, Mesh};
+use ggez::graphics::{DrawParam, Color, Rect, Drawable, DrawMode, Mesh, StrokeOptions};
 use ggez::{Context, GameResult};
 
 use crate::unit::*;
@@ -89,6 +89,7 @@ impl MeshBuilderOps{
     }
 
     pub fn polygon(mut self, pts : Vec::<Position>, color: Color) -> MeshBuilderOps{
+        // DrawMode::Stroke(StrokeOptions::default())
         let _ = self.mb.polygon(DrawMode::fill(), &pts, color);
         self
     }

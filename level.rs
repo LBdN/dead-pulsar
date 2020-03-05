@@ -427,19 +427,18 @@ pub fn playload(level : &Level, center : Position, renderer: &mut render::Render
             let r = random_rect(max_size, &wb.w.size);
             mb = mb.rect(&r.0, &r.1, color::random_grey_color());
         }
-
-        let b1 = Bounds{min: Size{x:0.0, y:200.0}, max: wb.w.size};
-        let mut pts = terrain::build_terrain(&b1, wb.w.size.x / 10.0);
-        terrain::invert_pos(&wb.w.size, &mut pts);
-        mb = mb.polygon(pts, color::MARROON);    
-        let b2 = Bounds{min: Size{x:0.0, y:100.0}, max: wb.w.size};
-        let mut pts = terrain::build_terrain(&b2, wb.w.size.x / 10.0);        
-        terrain::invert_pos(&wb.w.size, &mut pts);
-        mb = mb.polygon(pts, color::GREY);    
-        let b3 = Bounds{min: Size{x:0.0, y:00.0}, max: wb.w.size};
-        let mut pts = terrain::build_terrain(&b3, wb.w.size.x / 10.0);        
-        terrain::invert_pos(&wb.w.size, &mut pts);
-        mb = mb.polygon(pts, color::RED);   
+        let nbsteps = 10;
+        for (i, c)  in color::fade_to(nbsteps, &color::RED, &color::GREEN).iter().enumerate(){
+            let b1 = Bounds{min: Size{x:0.0, y:((nbsteps - i as i32) as f32)*10.0}, max: wb.w.size};
+            let mut pts = terrain::build_terrain(&b1, wb.w.size.x / 10.0);
+            terrain::invert_pos(&wb.w.size, &mut pts);
+            mb = mb.polygon(pts, *c);        
+        }
+        for (i, c)  in color::fade_to(nbsteps, &color::RED, &color::GREEN).iter().enumerate(){
+            let b1 = Bounds{min: Size{x:0.0, y:((nbsteps - i as i32) as f32)*10.0}, max: wb.w.size};
+            let pts = terrain::build_terrain(&b1, wb.w.size.x / 10.0);            
+            mb = mb.polygon(pts, *c);        
+        }
         
         let drawable = mb.build(renderer, ctx);
         a.drawable = drawable;

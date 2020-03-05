@@ -1,4 +1,4 @@
-use ggez::graphics::{Color};
+use ggez::graphics::{Color, BLACK};
 use rand::Rng;
 
 pub const GREY  : Color = Color{ r: 0.5, g:0.5, b:0.5, a:1.0};
@@ -28,4 +28,25 @@ pub fn fade_to_transparent(nbsteps: i32, color : &Color) -> Vec::<Color> {
         colors.push(c);
     }
     colors
+}
+
+pub fn fade_to(nbsteps: i32, color1 : &Color, color2 : &Color) -> Vec::<Color> {
+    let mut colors = Vec::<Color>::new();
+    let step_size = 1.0 / nbsteps as f32;    
+    for i in 0..nbsteps{        
+        let mix = (i as f32)*step_size;
+        colors.push(interpolate(&color1, &color2, mix));
+    }
+    colors
+}
+
+pub fn interpolate(c1 : &Color, c2 : &Color, mix: f32) -> Color
+{   
+   let mut result= BLACK.clone();
+
+   result.r = c1.r*(1.0-mix) + c2.r*(mix);
+   result.g = c1.g*(1.0-mix) + c2.g*(mix);
+   result.b = c1.b*(1.0-mix) + c2.b*(mix);
+
+   return result;
 }

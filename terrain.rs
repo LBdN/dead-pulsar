@@ -40,7 +40,9 @@ pub fn build_terrain(bounds : &Bounds, max_length : f32)-> Vec::<Position>{
 }
 
 pub fn invert_pos( world_size : &Size, points : &mut Vec::<Position>) {
-    
+    points.insert(0, Position{ x:0.0, y:0.0});
+    points.push( Position{ x:world_size.x, y:0.0}  );
+
     for p in  &mut points.iter_mut(){
         p.y = world_size.y - p.y
     }
@@ -65,9 +67,7 @@ fn _build_terrain(world_size : Size, max_length : f32) -> Vec::<Position>{
             TerrainSlope::Up   => (y += segment_lenth * tan45 * UP.y),
             TerrainSlope::Down => (y -= segment_lenth * tan45 * UP.y)
         }        
-        y  = y.max(0.0).min(world_size.y / 2.0);
-        // reverse because coord frame
-        // y = world_size.y -y;
+        y  = y.max(0.0).min(world_size.y / 2.0);        
         points.push(Position{x:x, y:y});
         length += segment_lenth;
         last_direction = direction;

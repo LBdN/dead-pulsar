@@ -8,6 +8,7 @@ use crate::unit;
 use nalgebra as nal;
 use ncollide2d;
 use ncollide2d::shape::{Shape, SupportMap};
+use ncollide2d::query::{Contact};
 use ggez::nalgebra as na;
 use nal::{Point2, Isometry2, Vector2, U2};
 
@@ -61,12 +62,12 @@ impl Collision {
 }
 
 pub fn mk_nocol() -> Collision{
-    Collision::NoCollision{ ncol : ColBall::new(0.0f32)}
+    Collision::NoCollision{ ncol : ColBall::new(0.0001f32)}
 }
 
 
 
-pub fn collides2(pos1 : &unit::Position, col1 : &Collision, pos2 : &unit::Position, col2 : &Collision){
+pub fn collides2(pos1 : &unit::Position, col1 : &Collision, pos2 : &unit::Position, col2 : &Collision) -> Option<Contact<f32>>{
     let prediction = 1.0f32;
     let iso1 = Isometry2::new(Vector2::new(pos1.x, pos1.y), na::zero());
     let iso2 = Isometry2::new(Vector2::new(pos2.x, pos2.y), na::zero());    
@@ -74,19 +75,23 @@ pub fn collides2(pos1 : &unit::Position, col1 : &Collision, pos2 : &unit::Positi
     let shp1 = col1.get_ncol().unwrap();
     let shp2 = col2.get_ncol().unwrap();
 
-    let ctct_penetrating = ncollide2d::query::contact_support_map_support_map(
+    ncollide2d::query::contact_support_map_support_map(
         &iso1,
         shp1,
         &iso2,
         shp2,
         prediction,
-    );
+    )
 }
 
 pub fn collides( pos1 : &unit::Position, col1 : &Collision, pos2 : &unit::Position, col2 : &Collision) -> bool {
     let v1 = CPoint{x : pos1.x ,y : pos1.y };
     let v2 = CPoint{x : pos2.x ,y : pos2.y };
     let delta = v2-v1;
+
+    if let Some(_) = collides2(pos1, col1, pos2, col2){
+        return  true;
+    };
 
     match (col1, col2) {
         ( Collision::RectCollision{width : width1, height:height1, ..}, Collision::RectCollision{width : width2, height:height2, ..}) => {            

@@ -54,7 +54,7 @@ impl Effect{
                     *color = color::GREEN;
                 }                 
                 _actor.ticking = false;       
-                _actor.collision = actors::Collision::NoCollision;         
+                _actor.collision = actors::mk_nocol();         
                 Some(level::WorldChange {
                     score: 1,
                     level: None,

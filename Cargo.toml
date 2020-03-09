@@ -32,9 +32,13 @@ path = "main.rs"
 
 
 [dependencies]
-rand="*"
-ggez="*"
-cgmath = "*"
-mint = "*"
-find_folder = "*"
+rand="0.7.3"
+ggez="0.5.1"
+cgmath = "0.17"
+mint = "0.5.4"
+find_folder = "0.3.0"
 uuid = { version = "0.8", features = ["serde", "v4"] }
+
+nalgebra= "0.20.0"
+ncollide2d = "0.22.0"
+# num-trait = "*"

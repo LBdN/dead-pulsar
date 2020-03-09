@@ -136,7 +136,7 @@ impl World{
             x : player_actor.transform.x + size1.x/2.0,
             y : player_actor.transform.y + size1.y/2.0
         };
-        let collision1 = player_actor.collision;
+        let collision1 = player_actor.collision.clone();
                                 
         for a in &mut self.actors {
             if !a.has_collision() {
@@ -223,7 +223,8 @@ impl WorldBuilder{
             color   : color,
             size    : size,
         };            
-        a.collision = super::actors::Collision::RectCollision { width: size.x, height: size.y };
+        let ncol = actors::RectColPolygon(size.x, size.y);
+        a.collision = super::actors::Collision::RectCollision { width: size.x, height: size.y, ncol : ncol };
     }
 
     fn add_to_world(&mut self, a : actors::Actor) -> Id{
@@ -256,7 +257,7 @@ impl WorldBuilder{
     fn add_camera(&mut self) -> Id {
         let mut a = super::actors::Actor::new(super::actors::ActorType::Camera, get_id());        
         a.drawable  = super::render::Renderable::NoDraw;
-        a.collision = super::actors::Collision::NoCollision;
+        a.collision = super::actors::mk_nocol();
         a.transform = Position{ x:0 as f32, y:0 as f32};
         
         self.w.camera_atr_id = a.id.clone();

@@ -21,7 +21,7 @@ pub enum DrawContext{
 
 pub type ColPolygon = ncollide2d::shape::ConvexPolygon::<f32>;
 pub type ColBall    = ncollide2d::shape::Ball::<f32>;
-
+pub type Polyline   = ncollide2d::shape::Polyline::<f32>;
 
 pub fn RectColPolygon(width : f32, height : f32) -> ColPolygon{
 
@@ -36,11 +36,12 @@ pub fn RectColPolygon(width : f32, height : f32) -> ColPolygon{
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Collision{
     NoCollision{ ncol : ColBall },
     RectCollision{ width : f32, height : f32, ncol : ColPolygon},
-    DiscCollision{ radius: f32,  ncol : ColBall }
+    DiscCollision{ radius: f32,  ncol : ColBall },
+    PolyCollision{ ncol : Polyline}
 }
 
 impl Collision {
@@ -48,7 +49,8 @@ impl Collision {
         match self {
             Collision::RectCollision{width, height, ..} => unit::Size{x:*width, y:*height},
             Collision::DiscCollision{radius, ..} => unit::Size{x:*radius, y:*radius},
-            Collision::NoCollision{..} => unit::Size{x:0.0, y:0.0}
+            Collision::NoCollision{..} => unit::Size{x:0.0, y:0.0},
+            _ => unit::Size{x: 0.0, y:0.0}
         }
     }    
 
@@ -56,7 +58,17 @@ impl Collision {
         match self {
             Collision::RectCollision{width, height , ncol} => ncol.as_support_map(),
             Collision::DiscCollision{radius, ncol} => ncol.as_support_map(),
-            Collision::NoCollision{ncol} => ncol.as_support_map()
+            Collision::NoCollision{ncol} => ncol.as_support_map(),
+            _ => None
+        }
+    }
+
+    pub fn get_ncol2(&self) -> Box<&dyn Shape<f32>> {
+        match self {
+            Collision::RectCollision{width, height , ncol} => Box::new(ncol),
+            Collision::DiscCollision{radius, ncol} => Box::new(ncol),
+            Collision::NoCollision{ncol} => Box::new(ncol),
+            Collision::PolyCollision{ncol} => Box::new(ncol)            
         }
     }
 }
@@ -65,6 +77,13 @@ pub fn mk_nocol() -> Collision{
     Collision::NoCollision{ ncol : ColBall::new(0.0001f32)}
 }
 
+pub fn mk_polycol(pts : &Vec::<unit::Position>) -> Collision{
+    let mut points = Vec::<Point2<f32>>::new();
+    for p in pts{
+        points.push( Point2::new(p.x, p.y));
+    }    
+    Collision::PolyCollision{ncol : Polyline::new(points, None) }
+}
 
 
 pub fn collides2(pos1 : &unit::Position, col1 : &Collision, pos2 : &unit::Position, col2 : &Collision) -> Option<Contact<f32>>{
@@ -72,14 +91,14 @@ pub fn collides2(pos1 : &unit::Position, col1 : &Collision, pos2 : &unit::Positi
     let iso1 = Isometry2::new(Vector2::new(pos1.x, pos1.y), na::zero());
     let iso2 = Isometry2::new(Vector2::new(pos2.x, pos2.y), na::zero());    
 
-    let shp1 = col1.get_ncol().unwrap();
-    let shp2 = col2.get_ncol().unwrap();
+    let shp1 = col1.get_ncol2();
+    let shp2 = col2.get_ncol2();
 
-    ncollide2d::query::contact_support_map_support_map(
+    ncollide2d::query::contact(
         &iso1,
-        shp1,
+        *shp1,
         &iso2,
-        shp2,
+        *shp2,
         prediction,
     )
 }
@@ -178,7 +197,11 @@ impl Actor {
             ActorType::Foreground => {
                 self.visible = true;
                 self.ticking = true;
-            }
+            },
+            ActorType::Background => {
+                self.visible = true;
+                self.ticking = true;
+            },
             _ => {
                 self.visible = true;
                 self.ticking = false;
@@ -194,9 +217,9 @@ impl Actor {
         if !self.ticking{
             false
         }
-        else if let ActorType::Background = self.atype {
-            false
-        }
+        // else if let ActorType::Background = self.atype {
+        //     false
+        // }
         else if let ActorType::Player = self.atype {
             false
         }

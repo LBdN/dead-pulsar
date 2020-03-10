@@ -30,6 +30,15 @@ fn random_length( max : f32) -> f32{
     rng.gen_range(low, max)
 }
 
+pub fn build_sky(bounds : &Bounds) -> Vec::<Position>{
+    let mut points = Vec::<Position>::new();
+    points.push( bounds.min.clone() );
+    points.push( Position{x: bounds.min.x, y: bounds.max.y});
+    points.push( bounds.max.clone());
+    points.push( Position{x: bounds.max.x, y: bounds.min.y});    
+    points
+}
+
 
 pub fn build_terrain(bounds : &Bounds, max_length : f32)-> Vec::<Position>{
     let mut points = _build_terrain(bounds.get_size(), max_length);

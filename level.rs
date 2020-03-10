@@ -423,23 +423,31 @@ pub fn playload(level : &Level, center : Position, renderer: &mut render::Render
     {
         let mut a = actors::ActorType::Background.make();
         let mut mb = render::MeshBuilderOps::new();    
-        let max_size = 50.0;
-        for _ in 0..10000{
-            let r = random_rect(max_size, &wb.w.size);
-            mb = mb.rect(&r.0, &r.1, color::random_grey_color());
-        }
-        let nbsteps = 10;
+        // let max_size = 50.0;
+        // for _ in 0..10000{
+        //     let r = random_rect(max_size, &wb.w.size);
+        //     mb = mb.rect(&r.0, &r.1, color::random_grey_color());
+        // }
+        let b = Bounds{min: Size{x:0.0, y:0.0}, max: wb.w.size};
+        let pts = terrain::build_sky(&b);
+        mb = mb.polygon(pts, color::DARKBLUE);        
+        let nbsteps = 5;
         for (i, c)  in color::fade_to(nbsteps, &color::RED, &color::GREEN).iter().enumerate(){
             let b1 = Bounds{min: Size{x:0.0, y:((nbsteps - i as i32) as f32)*10.0}, max: wb.w.size};
             let mut pts = terrain::build_terrain(&b1, wb.w.size.x / 10.0);
             terrain::invert_pos(&wb.w.size, &mut pts);
-            mb = mb.polygon(pts, *c);        
+            mb = mb.polygon(pts.clone(), *c);        
+            if (i as i32) == nbsteps -1{
+                a.collision = actors::mk_polycol(&pts);
+                a.on_collision.push(level.get_transition_effect("lose".to_string(), 0.0));                
+                a.ticking = true;
+            }
         }
-        for (i, c)  in color::fade_to(nbsteps, &color::RED, &color::GREEN).iter().enumerate(){
-            let b1 = Bounds{min: Size{x:0.0, y:((nbsteps - i as i32) as f32)*10.0}, max: wb.w.size};
-            let pts = terrain::build_terrain(&b1, wb.w.size.x / 10.0);            
-            mb = mb.polygon(pts, *c);        
-        }
+        // for (i, c)  in color::fade_to(nbsteps, &color::RED, &color::GREEN).iter().enumerate(){
+        //     let b1 = Bounds{min: Size{x:0.0, y:((nbsteps - (i+1) as i32) as f32)*10.0}, max: wb.w.size};
+        //     let pts = terrain::build_terrain(&b1, wb.w.size.x / 10.0);            
+        //     mb = mb.polygon(pts, *c);        
+        // }
         
         let drawable = mb.build(renderer, ctx);
         a.drawable = drawable;
@@ -450,7 +458,7 @@ pub fn playload(level : &Level, center : Position, renderer: &mut render::Render
     {
         let max_size = 50.0;
         // let sound_idx = wb.add_sound("/Randomize6.wav".to_string(), &mut ctx);
-        for _ in 0..100{
+        for _ in 0..1{
             let id = wb.add_antagonist(max_size);
             wb.add_effect_to_actor(&id, effect::Effect::ResetActor{actor_id : id.clone()}, true);
             let a = wb.get_mut_actor(&id).unwrap();

@@ -9,11 +9,22 @@
 ## v0.0.2
 - scenes : start and end game.
 - effects
+
+## v0.0.3 
+- ground
+- integration n collide.
 - camera border.
 
+## v0.0.4 <---
+- ship design
+- tunnel
+- main menu
+-  
 
-## v0.0.3
+
+
+
+
 - layout ( ui )
 
 - projectile ?
-- ground

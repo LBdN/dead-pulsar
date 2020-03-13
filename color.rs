@@ -49,6 +49,7 @@ pub fn interpolate(c1 : &Color, c2 : &Color, mix: f32) -> Color
    result.r = c1.r*(1.0-mix) + c2.r*(mix);
    result.g = c1.g*(1.0-mix) + c2.g*(mix);
    result.b = c1.b*(1.0-mix) + c2.b*(mix);
+   result.a = c1.a*(1.0-mix) + c2.a*(mix);
 
    return result;
 }

@@ -22,12 +22,18 @@ pub fn opposite_pos(p : &Position)-> Position{
 pub type KeyedResource<T> = HashMap<Id, T>;
 pub type KeyedGroup<T>    = HashMap<Id, Vec::<T>>;
 
-pub struct Bounds{
+
+pub struct Bounds1D{
+    pub min: f32,
+    pub max: f32
+}
+
+pub struct Bounds2D{
     pub min: Size,
     pub max: Size
 }
 
-impl Bounds{
+impl Bounds2D{
     pub fn get_size(&self) -> Size{
         Size{
             x: self.max.x - self.min.x,

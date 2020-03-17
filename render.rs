@@ -94,6 +94,11 @@ impl MeshBuilderOps{
         self
     }
 
+    pub fn polyline(mut self, pts : Vec::<Position>,width: f32, color: Color) -> MeshBuilderOps{        
+        let _ = self.mb.polygon(DrawMode::stroke(width), &pts, color);
+        self
+    }
+
     pub fn rect(mut self, pos : &Position, size: &Size, color1: Color) -> MeshBuilderOps {
         let _ = self.mb.rectangle(
             DrawMode::fill(),

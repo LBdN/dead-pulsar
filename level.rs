@@ -2,14 +2,17 @@ use std::collections::HashMap;
 use ggez::{Context};
 use ggez::graphics::{Color};
 use rand::Rng;
+use rand::seq::SliceRandom;
 use crate::unit::*;
 use crate::effect;
 use crate::text;
 use crate::color;
 use crate::terrain;
+use crate::tunnel;
 use crate::render;
 use crate::GameState;
 use crate::actors;
+use crate::cell;
 
 fn random_rect(maxsize : f32, world_size : &Size) -> (Position, Size) {
     let mut rng = rand::thread_rng();
@@ -371,7 +374,7 @@ pub fn introload(level : &Level, center : Position, renderer: &mut render::Rende
     let mut wb = WorldBuilder::new(level.name.clone());
 
     let id = wb.add_text("Pulsar 3".to_string(), text::title_style(),false);     
-    wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string(), 3.0 ), false );
+    wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string(), 0.0 ), false );
     wb.get_mut_actor(&id).map( |a| {
         a.transform = center;      
         a
@@ -386,7 +389,7 @@ pub fn tutoload(level : &Level, center : Position, renderer: &mut render::Render
 
     let tuto_text = "Catch the yellow blocks and\n exit with the green one.".to_string();
     let id = wb.add_text(tuto_text, text::tuto_style(),false);     
-    wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string(), 3.0), false );
+    wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string(), 0.0), false );
     wb.get_mut_actor(&id).unwrap().transform = center;        
 
     wb.add_default_camera();
@@ -419,73 +422,128 @@ pub fn playload(level : &Level, center : Position, renderer: &mut render::Render
     let mut wb = WorldBuilder::new(level.name.clone());
     wb.set_size(Size{x:1000.0, y:600.0});
 
+    let section_length = Bounds1D{min:10.0, max:100.0};
+    let (mut top, mut bottom) = terrain::build_tunnel2(&wb.w.size, &section_length, 50.0);
+    terrain::invert_pos(&wb.w.size, &mut top, false);
+    terrain::invert_pos(&wb.w.size, &mut bottom, false);
+    let mut cells = cell::create_cells(&top, &bottom);
+
     // BACKGROUND.
     {
+        // SKY
         let mut a = actors::ActorType::Background.make();
         let mut mb = render::MeshBuilderOps::new();    
-        // let max_size = 50.0;
-        // for _ in 0..10000{
-        //     let r = random_rect(max_size, &wb.w.size);
-        //     mb = mb.rect(&r.0, &r.1, color::random_grey_color());
-        // }
-        let b = Bounds{min: Size{x:0.0, y:0.0}, max: wb.w.size};
-        let pts = terrain::build_sky(&b);
+        let b = Bounds2D{min: Size{x:0.0, y:0.0}, max: wb.w.size};
+        let pts = terrain::build_sky(&b);        
         mb = mb.polygon(pts, color::DARKBLUE);        
-        let nbsteps = 5;
-        for (i, c)  in color::fade_to(nbsteps, &color::RED, &color::GREEN).iter().enumerate(){
-            let b1 = Bounds{min: Size{x:0.0, y:((nbsteps - i as i32) as f32)*10.0}, max: wb.w.size};
-            let mut pts = terrain::build_terrain(&b1, wb.w.size.x / 10.0);
-            terrain::invert_pos(&wb.w.size, &mut pts);
-            mb = mb.polygon(pts.clone(), *c);        
-            if (i as i32) == nbsteps -1{
-                a.collision = actors::mk_polycol(&pts);
-                a.on_collision.push(level.get_transition_effect("lose".to_string(), 0.0));                
-                a.ticking = true;
-            }
-        }
-        // for (i, c)  in color::fade_to(nbsteps, &color::RED, &color::GREEN).iter().enumerate(){
-        //     let b1 = Bounds{min: Size{x:0.0, y:((nbsteps - (i+1) as i32) as f32)*10.0}, max: wb.w.size};
-        //     let pts = terrain::build_terrain(&b1, wb.w.size.x / 10.0);            
-        //     mb = mb.polygon(pts, *c);        
-        // }
-        
         let drawable = mb.build(renderer, ctx);
         a.drawable = drawable;
         wb.add_to_world(a);
+
+        //TUNNEL TOP
+        let mut a = actors::ActorType::Background.make();
+        let mut mb = render::MeshBuilderOps::new();    
+        mb = mb.polygon(top.clone(), color::GREEN);    
+        let drawable = mb.build(renderer, ctx);
+        a.drawable = drawable;
+        a.collision = actors::mk_polycol(&top);
+        a.on_collision.push(level.get_transition_effect("lose".to_string(), 0.0));                
+        a.ticking = true;
+        wb.add_to_world(a);
+
+        //TUNNEL BOTTOM
+        let mut a = actors::ActorType::Background.make();
+        let mut mb = render::MeshBuilderOps::new();    
+        mb = mb.polygon(bottom.clone(), color::GREEN);    
+        let drawable = mb.build(renderer, ctx);
+        a.drawable = drawable;
+        a.collision = actors::mk_polycol(&bottom);
+        a.on_collision.push(level.get_transition_effect("lose".to_string(), 0.0));                
+        a.ticking = true;
+        wb.add_to_world(a);
+
+        
+        let nbsteps = 5;
+        // for (i, c)  in color::fade_to(nbsteps, &color::RED, &color::GREEN).iter().enumerate(){
+        //     let b1 = Bounds{min: Size{x:0.0, y:((nbsteps - i as i32) as f32)*10.0}, max: wb.w.size};
+        //     let mut pts = terrain::build_terrain(&b1, wb.w.size.x / 10.0);
+        //     terrain::invert_pos(&wb.w.size, &mut pts);
+        //     mb = mb.polygon(pts.clone(), *c);        
+        //     if (i as i32) == nbsteps -1{
+        //         a.collision = actors::mk_polycol(&pts);
+        //         a.on_collision.push(level.get_transition_effect("lose".to_string(), 0.0));                
+        //         a.ticking = true;
+        //     }
+        // }
+        // let (top, bottom) = tunnel::build_tunnel(&wb.w.size, wb.w.size.x / 10.0);
+        
+        // terrain::invert_pos(&wb.w.size, &mut pts);
+        
+            
+        // mb = mb.polygon(bottom.clone(), color::RED);        
+        // mb = mb.polyline(cells.iter().nth(cells.len()-2).unwrap().get_points(), 2.0, color::GREY);        
+
+        // // for (i, c)  in color::fade_to(nbsteps, &color::RED, &color::GREEN).iter().enumerate(){
+        // //     let b1 = Bounds{min: Size{x:0.0, y:((nbsteps - (i+1) as i32) as f32)*10.0}, max: wb.w.size};
+        // //     let pts = terrain::build_terrain(&b1, wb.w.size.x / 10.0);            
+        // //     mb = mb.polygon(pts, *c);        
+        // // }
+        
+        // let drawable = mb.build(renderer, ctx);
+        // a.drawable = drawable;
+        // wb.add_to_world(a);
+
+        
     }
     
     // ENEMIES
+    
+    let mut rng = rand::thread_rng();    
+    let mut cells2 = cells.clone();
+    cells2.shuffle(& mut rng);
+    // let p = cell::place_disc_in_cell(&cells[x], &mut rng);
     {
         let max_size = 50.0;
         // let sound_idx = wb.add_sound("/Randomize6.wav".to_string(), &mut ctx);
-        for _ in 0..1{
+        for c in cells2.iter().skip(1).take(cells2.len()-2){
+            let p = cell::place_disc_in_cell(&c, &mut rng);
             let id = wb.add_antagonist(max_size);
             wb.add_effect_to_actor(&id, effect::Effect::ResetActor{actor_id : id.clone()}, true);
             let a = wb.get_mut_actor(&id).unwrap();
             a.on_collision.push(effect::Effect::KillActor{actor_id:a.id.clone()});            
+            a.transform = p;
             // a.on_collision.push(effect::Effect::PlaySound{sound_index:sound_idx});
         }
     }
 
     // END TRIGGER
-    {
-        let ids = wb.add_end_rects(50.0);
-        let a = wb.get_mut_actor(&ids[0]).unwrap();
-        a.on_collision.push(level.get_transition_effect("lose".to_string(), 0.0));            
-        let a = wb.get_mut_actor(&ids[1]).unwrap();
-        a.on_collision.push(level.get_transition_effect("win".to_string(), 0.0));            
-        if let render::Renderable::DynamicRect{ref mut color, ..} = a.drawable {
-            *color = color::GREEN;
-        }
-        let a = wb.get_mut_actor(&ids[2]).unwrap();
-        a.on_collision.push(level.get_transition_effect("lose".to_string(), 0.0));                
-    }
+
+    let mut a = actors::ActorType::Foreground.make();
+    let c = cells.iter().nth(cells.len()-2).unwrap();
+    a.collision = actors::mk_polycol(&c.get_points());
+    a.on_collision.push(level.get_transition_effect("win".to_string(), 0.0));            
+    wb.add_to_world(a);
+    // {
+    //     let ids = wb.add_end_rects(50.0);
+    //     let a = wb.get_mut_actor(&ids[0]).unwrap();
+    //     a.on_collision.push(level.get_transition_effect("lose".to_string(), 0.0));            
+    //     let a = wb.get_mut_actor(&ids[1]).unwrap();
+    //     a.on_collision.push(level.get_transition_effect("win".to_string(), 0.0));            
+    //     if let render::Renderable::DynamicRect{ref mut color, ..} = a.drawable {
+    //         *color = color::GREEN;
+    //     }
+    //     let a = wb.get_mut_actor(&ids[2]).unwrap();
+    //     a.on_collision.push(level.get_transition_effect("lose".to_string(), 0.0));                
+    // }
     
 
     // PLAYER
     {
-        let mut player_start = center.clone();
-        player_start.x = 10.0;
+        let c = &cells[2];
+        let p = c.get_center();
+        let player_start = c.get_center();
+        // let mut player_start = center.clone();
+        // player_start.x = 10.0;
         let player_actor_id = wb.add_player();
         let eff = effect::Effect::MoveActor{actor_id:player_actor_id, vector:Position{x :1.0, y:0.0}};
         wb.add_effect_to_actor(&player_actor_id, eff, false);

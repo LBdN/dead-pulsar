@@ -29,6 +29,8 @@ mod actors;
 mod level; 
 mod effect;
 mod terrain;
+mod tunnel;
+mod cell;
 /// **********************************************************************
 /// The `InputState` is exactly what it sounds like, it just keeps track of
 /// the user's input state so that we turn keyboard events into something

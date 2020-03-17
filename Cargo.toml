@@ -39,6 +39,6 @@ mint = "0.5.4"
 find_folder = "0.3.0"
 uuid = { version = "0.8", features = ["serde", "v4"] }
 
-nalgebra= "0.20.0"
+nalgebra= {version = "0.20.0", features = ["mint"] }
 ncollide2d = "0.22.0"
 # num-trait = "*"

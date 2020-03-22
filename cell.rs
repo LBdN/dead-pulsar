@@ -1,5 +1,5 @@
 use nalgebra as na;
-use crate::unit::{Position, Size};
+use crate::unit::{Position};
 use rand::Rng;
 use rand::rngs::ThreadRng;
 use mint::Point2 as pp2;

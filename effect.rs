@@ -61,8 +61,9 @@ impl Effect{
                     dead_effect: true
                 })
             },
-            Effect::ProcessInput => {                              
-                player_handle_input(&state.input, _actor, &worldbounds);
+            Effect::ProcessInput => {         
+
+                player_handle_input(&state.input, _actor, &worldbounds, timer::delta(_ctx).as_millis());
                 None
             },
             Effect::MoveActor{actor_id, vector} => {                

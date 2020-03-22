@@ -7,10 +7,10 @@ use crate::unit;
 // use num_traits as num;
 use nalgebra as nal;
 use ncollide2d;
-use ncollide2d::shape::{Shape, SupportMap};
+use ncollide2d::shape::{Shape};
 use ncollide2d::query::{Contact};
 use ggez::nalgebra as na;
-use nal::{Point2, Isometry2, Vector2, U2};
+use nal::{Point2, Isometry2, Vector2};
 
 
 #[derive(Copy, Clone, PartialEq)]
@@ -23,7 +23,7 @@ pub type ColPolygon = ncollide2d::shape::ConvexPolygon::<f32>;
 pub type ColBall    = ncollide2d::shape::Ball::<f32>;
 pub type Polyline   = ncollide2d::shape::Polyline::<f32>;
 
-pub fn RectColPolygon(width : f32, height : f32) -> ColPolygon{
+pub fn rect_col_polygon(width : f32, height : f32) -> ColPolygon{
 
     let points = [
         Point2::new(0.0f32, 0.0f32),
@@ -54,16 +54,7 @@ impl Collision {
         }
     }    
 
-    pub fn get_ncol(&self) -> Option<&dyn SupportMap<f32>> {
-        match self {
-            Collision::RectCollision{width, height , ncol} => ncol.as_support_map(),
-            Collision::DiscCollision{radius, ncol} => ncol.as_support_map(),
-            Collision::NoCollision{ncol} => ncol.as_support_map(),
-            _ => None
-        }
-    }
-
-    pub fn get_ncol2(&self) -> Box<&dyn Shape<f32>> {
+    pub fn get_ncol(&self) -> Box<&dyn Shape<f32>> {
         match self {
             Collision::RectCollision{width, height , ncol} => Box::new(ncol),
             Collision::DiscCollision{radius, ncol} => Box::new(ncol),
@@ -91,8 +82,8 @@ pub fn collides2(pos1 : &unit::Position, col1 : &Collision, pos2 : &unit::Positi
     let iso1 = Isometry2::new(Vector2::new(pos1.x, pos1.y), na::zero());
     let iso2 = Isometry2::new(Vector2::new(pos2.x, pos2.y), na::zero());    
 
-    let shp1 = col1.get_ncol2();
-    let shp2 = col2.get_ncol2();
+    let shp1 = col1.get_ncol();
+    let shp2 = col2.get_ncol();
 
     ncollide2d::query::contact(
         &iso1,

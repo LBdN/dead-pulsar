@@ -244,7 +244,7 @@ pub fn build_tunnel2(world_size : &Size, length_bounds : &Bounds1D, min_height: 
     let tunnel_bottom = world_size.y/3.0;
     let start_segment = HeightRange{top: tunnel_bottom+tunnel_height, bottom:tunnel_bottom};
     top_pts.push(Position{ x:0.0, y: start_segment.top});
-    bot_pts.push(Position{ x:0.0, y: start_segment.bottom});
+    bot_pts.push(Position{ x:0.0, y: start_segment.bottom});  
 
     
 
@@ -255,6 +255,7 @@ pub fn build_tunnel2(world_size : &Size, length_bounds : &Bounds1D, min_height: 
     let mut rng = rand::thread_rng();  
     let mut length = 0.0;
 
+    let mut first = true;
     let mut current_range = start_segment;
     while length < world_size.x{
 
@@ -269,9 +270,13 @@ pub fn build_tunnel2(world_size : &Size, length_bounds : &Bounds1D, min_height: 
         }
 
         length += segment_length;
-        let cos_a = min_height / current_range.size() ;
-        let max_vert_move = cos_a.acos().tan() * segment_length;
-        current_range = get_tunnel_height(world_range, current_range, min_height, max_vert_move, &mut rng);
+        if first {
+            first = !first;
+        } else {        
+            let cos_a = min_height / current_range.size() ;
+            let max_vert_move = cos_a.acos().tan() * segment_length;
+            current_range = get_tunnel_height(world_range, current_range, min_height, max_vert_move, &mut rng);
+        } 
         top_pts.push(Position{ x:length, y: current_range.top});
         bot_pts.push(Position{ x:length, y: current_range.bottom});
     }

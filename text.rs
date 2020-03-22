@@ -19,17 +19,6 @@ pub struct FontStyle{
 }
 
 
-impl FontStyle{
-    pub fn default() -> FontStyle{
-        FontStyle{
-            size: 10.0,
-            name: "".to_string(),
-            weight: FontWeight::Normal,
-            color : WHITE
-        }
-    }
-}
-
 pub fn title_style() -> FontStyle{
     FontStyle{
         size: 56.0,

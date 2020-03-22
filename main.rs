@@ -12,8 +12,6 @@ use ggez::input::keyboard::KeyCode;
 use ggez::event::KeyMods;
 use ggez::graphics;
 use ggez::conf;
-use ggez::timer;
-use ggez::audio;
 
 use crate::unit::*;
 
@@ -31,6 +29,7 @@ mod effect;
 mod terrain;
 mod tunnel;
 mod cell;
+mod mesh_gen;
 /// **********************************************************************
 /// The `InputState` is exactly what it sounds like, it just keeps track of
 /// the user's input state so that we turn keyboard events into something
@@ -54,140 +53,25 @@ impl Default for InputState {
 }
 
 pub struct GameState{
-    score     : i32,
-    actor_id : Id,
-    input     : InputState
+    score     : i32,    
+    input     : InputState,
+    level     : i32,
+    screen : Size
 }
 
-pub struct Camera{
-    actor_id : Id
-}
-
-
-pub struct World {
-    size: [f64; 2]
-}
-
-
-
-#[derive(Debug, Clone)]
-struct Scene {
-    start_effects: Vec::<effect::Effect>,
-    effects      : Vec::<effect::Effect>,
-    actors       : Vec::<Id>,
-    active       : bool,
-    name         : String,
-    id           : Id
-}
-
-
-impl Scene {
-    pub fn new(name: String) -> Scene {
-        Scene {
-            start_effects: Vec::<effect::Effect>::new(),
-            effects      : Vec::<effect::Effect>::new(),
-            actors       : Vec::<Id>::new(),
-            active       : false,
-            name         : name,
-            id           : get_id()
-        }
-    }
-
-    pub fn start(&self, app : &mut App ){
-        println!("start {}", self.name);        
-        for eff in &self.start_effects{
-            let _ = eff.apply(app, 0.0);
-        }
-        for i in &self.actors{            
-            if let Some(a) = &mut app.actors.get_mut(&i) {
-                a.visible = true;
-                a.ticking = true;
-            }            
-        }        
-    }
-
-    pub fn stop(&self, app : &mut App ){        
-        println!("stop {}", self.name);
-        for i in &self.actors{            
-            if let Some(a) = &mut app.actors.get_mut(&i) {
-                a.visible = false;
-                a.ticking = false;
-            }            
-        }
-    }
-
-    pub fn apply_effects(&self, app : &mut App, t : f32 ) -> effect::EffectResult{
-        println!("apply_effects {}", self.name);
-        let before_effect_scene = app.current_scene;
-        let mut eff_result = effect::EffectResult::default();
-        for (i, eff) in self.effects.iter().enumerate(){            
-            let to_remove = eff.apply(app, t);
-            if to_remove {
-                eff_result.dead_effects.push(i);
-            }
-        }
-        eff_result.scene_changed = app.current_scene != before_effect_scene ;
-        eff_result
-    }
-}
 
 pub struct App {    
     renderer : render::Renderer,
-    scenes: KeyedResource::<Scene>, 
-    actors: KeyedResource::<actors::Actor>,    
-    sounds: KeyedResource::<audio::Source>,
     state: Option<GameState>,
-    camera: Camera,
-    world : World,    
-    started: bool,
-    current_scene : Id,  
-    last_scene_change: f32,
     levels : Vec::<level::Level>,
-    worlds : level::World,
+    world : level::World,    
 }
 
 
-fn connect_levels(app : &mut App, ctx: &mut Context){
-    let mut intro    = level::Level::new("Intro".to_string());
-    let mut tutorial = level::Level::new("tuto".to_string());
-    let mut play     = level::Level::new("play".to_string());
-    let mut gameover = level::Level::new("gameover".to_string());
-    let mut victory  = level::Level::new("victory".to_string());
-    let ref next_str = "next".to_string();
-    intro.add_transition(next_str, &tutorial);
-    tutorial.add_transition(next_str, &play);
-    play.add_transition(&"win".to_string(), &victory);
-    play.add_transition(&"lose".to_string(), &gameover);
-    victory.add_transition(next_str, &intro);
-    gameover.add_transition(next_str, &intro);
-    //
-    intro.loader = level::introload;
-    tutorial.loader = level::tutoload;
-    gameover.loader = level::gameoverload;
-    victory.loader = level::victoryload;
-    play.loader = level::playload;
-    app.levels.push(intro);
-    app.levels.push(tutorial);
-    app.levels.push(gameover);
-    app.levels.push(victory);
-    app.levels.push(play);
-    let mut w = app.levels[0].load(&mut app.renderer, ctx);
 
-    if let Some(state) = app.state.as_ref(){
-        // let input = &app.player.as_ref().unwrap().input.clone();
-
-        w.start(ctx, state);
-        app.worlds = w;
-    }
-
-    
-}
 
 impl App {
-    pub fn new(ctx: &mut Context) -> App {
-        // Load/create resources here: images, fonts, sounds, etc.
-        // let assets = find_folder::Search::ParentsThenKids(3, 3).for_folder("res").unwrap();
-        // let fp     = assets.join("FiraMono-Bold.ttf");
+    pub fn new(ctx: &mut Context, screen : Size) -> App {
 
         let mut fonts = HashMap::<String, graphics::Font>::new();
         fonts.insert("edundot".to_string(), graphics::Font::new(ctx, "/font/edundot.ttf").unwrap());
@@ -195,26 +79,16 @@ impl App {
         fonts.insert("FORCED SQUARE".to_string(), graphics::Font::new(ctx, "/font/FORCED SQUARE.ttf").unwrap());        
         fonts.insert("V5PRD___".to_string(), graphics::Font::new(ctx, "/font/V5PRD___.TTF").unwrap());        
 
-        
-        
-
         let mut a = App {
             renderer : render::Renderer::new(),
-            scenes : KeyedResource::<Scene>::new(), 
-            actors : KeyedResource::<actors::Actor>::new(),            
-            sounds : KeyedResource::<audio::Source>::new(),
             state : Some( GameState{
-                score    : 0,
-                actor_id : no_id(),
-                input    : InputState:: default()
-            }),
-            camera : Camera{ actor_id :  no_id()},
-            world  : World{ size: [1000.0, 640.0]},            
-            started : false,
-            current_scene : no_id(),
-            last_scene_change : 0.0,
+                score : 0,
+                input : InputState:: default(),
+                level : 0,
+                screen : screen
+            }),           
             levels : Vec::<level::Level>::new(),
-            worlds : level::World::empty()
+            world : level::World::empty()
         };
 
         a.renderer.fonts = fonts;
@@ -230,88 +104,14 @@ impl App {
         None
     }
 
-    // fn start(&mut self){        
-    //     self.start_scene();
-    //     self.started = true;          
-    // }
-
-    // fn start_scene(&mut self){
-    //     let scene_id = self.current_scene.clone();
-    //     {            
-    //         let s = self.get_scene(&scene_id);
-    //         s.clone().start(self);                         
-    //     }
-    //     self.last_scene_change = 0.0;     
-    //     {
-    //         let s = self.get_mut_scene(&scene_id);
-    //         s.active = true;
-    //     }
-    // }
-
-
-    fn display_status(&self){
-        println!("--> Result");
-        for (id, s) in self.scenes.iter() {
-            println!("{} {}", s.name,  s.active);
-            if s.active && self.current_scene != *id{
-                println!(" ↳ shouldn't be active");
-            }
-            if !s.active && self.current_scene == *id{
-                println!(" ↳ should be active");
-            }
-            for actor_id in &s.actors{
-                let a = self.actors.get(actor_id).unwrap();
-                if a.ticking != s.active {
-                    println!(" ↳ discrepencies between scene and actor status");
-                }                                
-            }
-        }
-    }
-
-    fn apply_effect(&mut self, _ctx: &mut Context) -> bool {
-        println!("---");
-        let original_scene = self.current_scene;
-        let t = timer::time_since_start(_ctx).as_secs_f32() - self.last_scene_change;
-        let s = self.scenes.get(&original_scene).unwrap().clone();
-        let eff_result = s.apply_effects(self, t);
-
-        let s = &mut self.scenes.get_mut(&original_scene).unwrap();
-        for i in eff_result.dead_effects.iter().rev(){
-            s.effects.remove(*i);
-        }
-        if eff_result.scene_changed{
-            self.last_scene_change = timer::time_since_start(_ctx).as_secs_f32();       
-            // cleanup effect dynamically placed.     
-            let mut eff_to_remove = Vec::<usize>::new();
-            for actor_id in &s.actors{
-                if let Some(a) = &self.actors.get_mut(actor_id){
-                    for eff in &a.on_collision{
-                        for (i, eff2) in s.effects.iter().enumerate(){
-                            if *eff == *eff2 && !eff_to_remove.contains(&i) {
-                                 eff_to_remove.push(i);
-                            }
-                        }
-                    }   
-                }
-                             
-            }
-            for i in eff_to_remove{
-                s.effects.remove(i);
-            }            
-        }
-        self.display_status();
-        println!("---");
-        eff_result.scene_changed
-        
-    }
 }
 
-fn player_handle_input(input : &InputState, pa : &mut actors::Actor, worldbounds : &level::WorldBounds) {
+fn player_handle_input(input : &InputState, pa : &mut actors::Actor, worldbounds : &level::WorldBounds, dt :u128) {
 
-    const MOVE_STEP : f32 = -10.0;    
+    const MOVE_STEP : f32 = -180.5;    
     
-    let movex = input.xaxis * -MOVE_STEP;
-    let movey = input.yaxis * MOVE_STEP;
+    let movex = input.xaxis * -MOVE_STEP * dt as f32 / 1000.0;
+    let movey = input.yaxis * MOVE_STEP  * dt as f32 / 1000.0;
         
     pa.transform.x += movex;
     pa.transform.y += movey;
@@ -333,7 +133,7 @@ impl EventHandler for App {
 
         let mut wc = level::WorldChange::default();
         if let Some(state) = self.state.as_ref(){            
-            wc = self.worlds.update(_ctx, &state);
+            wc = self.world.update(_ctx, &state);
         }
 
         if let Some(state) = self.state.as_mut(){
@@ -341,11 +141,11 @@ impl EventHandler for App {
         }
             
         if let Some(level_id) = wc.level{
-            self.worlds.stop();
-            
+            self.world.stop();            
             let level = (*self.find_level(&level_id).unwrap()).clone();
-            self.worlds = level.load(&mut self.renderer, _ctx);
-            self.worlds.start(_ctx, self.state.as_ref().unwrap());
+            let mut state = self.state.as_mut().unwrap();
+            self.world = level.load(&mut state, &mut self.renderer, _ctx);
+            self.world.start(_ctx, state);
         }
            
         
@@ -356,7 +156,7 @@ impl EventHandler for App {
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
 
 
-        let t = self.worlds.get_camera_actor().transform;
+        let t = self.world.get_camera_actor().transform;
         // let t = self.actors[&self.camera.actor_id].transform;
         self.renderer.start_frame(ctx, t);
             
@@ -368,7 +168,7 @@ impl EventHandler for App {
         self.renderer.push_cam_transform(ctx);
 
         // for a in self.actors.values() {
-        for a in &self.worlds.actors {
+        for a in &self.world.actors {
             if !a.visible {
                 continue;
             }
@@ -399,7 +199,7 @@ impl EventHandler for App {
 
         let mut draw_ctx = actors::DrawContext::WorldSpace;              
         self.renderer.pop_cam_transform(ctx);
-        for a in &self.worlds.actors {
+        for a in &self.world.actors {
             if !a.visible {
                 continue;
             }
@@ -427,21 +227,11 @@ impl EventHandler for App {
         if let Some(p) = self.state.as_mut(){
 
             match keycode {
-                KeyCode::Up => {
-                    p.input.yaxis = 1.0;
-                }
-                KeyCode::Down => {
-                    p.input.yaxis = -1.0;
-                }
-                KeyCode::Left => {
-                    p.input.xaxis = -1.0;
-                }
-                KeyCode::Right => {
-                    p.input.xaxis = 1.0;
-                }
-                KeyCode::Space => {
-                    p.input.fire = true;
-                }
+                KeyCode::Up    => { p.input.yaxis = 1.0;  }
+                KeyCode::Down  => { p.input.yaxis = -1.0; }
+                KeyCode::Left  => { p.input.xaxis = -1.0; }
+                KeyCode::Right => { p.input.xaxis = 1.0;  }
+                KeyCode::Space => { p.input.fire  = true; }
                 KeyCode::P => {
                     let img = graphics::screenshot(ctx).expect("Could not take screenshot");
                     img.encode(ctx, graphics::ImageFormat::Png, "/screenshot.png")
@@ -469,7 +259,43 @@ impl EventHandler for App {
 }
 
 
+fn connect_levels(app : &mut App, ctx: &mut Context){
+    let mut intro    = level::Level::new("Intro".to_string());
+    let mut tutorial = level::Level::new("tuto".to_string());
+    let mut play     = level::Level::new("play".to_string());
+    let mut gameover = level::Level::new("gameover".to_string());
+    let mut victory  = level::Level::new("victory".to_string());
+    let ref next_str = "next".to_string();
+    intro.add_transition(next_str, &tutorial);
+    tutorial.add_transition(next_str, &play);
+    play.add_transition(&"win".to_string(), &victory);
+    play.add_transition(&"lose".to_string(), &gameover);
+    victory.add_transition(next_str, &intro);
+    gameover.add_transition(next_str, &intro);
+    //
+    intro.loader    = level::introload;
+    tutorial.loader = level::tutoload;
+    gameover.loader = level::gameoverload;
+    victory.loader  = level::victoryload;
+    play.loader     = level::playload;
+    app.levels.push(intro);
+    app.levels.push(tutorial);
+    app.levels.push(gameover);
+    app.levels.push(victory);
+    app.levels.push(play);
+    
+    let mut state = app.state.as_mut().unwrap();
+    let mut w = app.levels[0].load(&mut state, &mut app.renderer, ctx);
 
+    if let Some(state) = app.state.as_ref(){
+        // let input = &app.player.as_ref().unwrap().input.clone();
+
+        w.start(ctx, state);
+        app.world = w;
+    }
+
+    
+}
 
 
 
@@ -484,131 +310,23 @@ fn main() {
         path::PathBuf::from("./resources")
     };
 
+    let window_setup = conf::WindowSetup::default().title("Dead Pulsar");
+    let window_mode  = conf::WindowMode::default();
+
+    let screen = Size{x: window_mode.width, y :window_mode.height};
+
     // Make a Context and an EventLoop.
     let (mut ctx, mut event_loop) = ContextBuilder::new("dead pulsar", "LBdN")
            .add_resource_path(resource_dir)
-           .window_setup(conf::WindowSetup::default().title("Dead Pulsar"))
+           .window_setup(window_setup)
+           .window_mode(window_mode)
            .build()
            .unwrap();
 
-
-
-    // Create an instance of your event handler.
-    // Usually, you should provide it with the Context object
-    // so it can load resources like images during setup.
-    let mut app = App::new(&mut ctx);
-
-    // connect_levels(&mut app, &mut ctx);
-
-    // let center = unit::Position{x: 400.0, y: 300.0};
-
-
-    // let intro_scene_idx = app.create_scene("intro".to_string());    
-    // // let text_id = app.add_text("Pulsar 3".to_string(), text::title_style(), true, &intro_scene_idx, true);
-    // // let a = app.actors.get_mut(&text_id).unwrap();
-    // // a.transform = center;
-
-    // let tutorial_idx = app.create_scene("intro".to_string());    {
-    //     let tuto_text = "Catch the yellow blocks and\n exit with the green one.".to_string();
-    //     let text_id = app.add_text(tuto_text, text::tuto_style(), true, &tutorial_idx, true);
-    //     let a = app.actors.get_mut(&text_id).unwrap();
-    //     a.transform = center;
-    // }
-    
-
-    // let play_scene_idx = app.create_scene("play".to_string());    
-    // {
-    //     app.add_background_rects(& mut ctx, &play_scene_idx);
-    //     let sound_idx = app.add_sound("/Randomize6.wav".to_string(), &mut ctx);
-    //     let eff = effect::Effect::PlaySound{sound_index:sound_idx};
-    //     let actor_ids       = app.add_foreground_rects(&play_scene_idx, eff);    
-    //     let player_actor_id = app.add_player(&play_scene_idx);
-    //     let camera_idx       = app.add_camera(&play_scene_idx);
-    //     let text_id         = app.add_text("Pulsar 3".to_string(), text::ui_style(), true, &play_scene_idx, false);
-    //     let a = app.actors.get_mut(&text_id).unwrap();
-    //     a.transform = unit::Position{x: 10.0, y: 10.0};
-        
-    //     let a = &app.actors[&text_id];        
-    //     let margin = 10.0;
-    //     let mut p = unit::Position{x:0.0+margin, y: 10.0};
-    //     if let render::Renderable::StaticText{text, ..} = &a.drawable{            
-    //         p = unit::Position{x:a.transform.x+text.width(&mut ctx) as f32 +margin, y: 10.0};        
-    //     } 
-    //     let text_id = app.add_text("Score: 0".to_string(), text::ui_style(), false, &play_scene_idx, false);
-    //     let a = app.actors.get_mut(&text_id).unwrap();
-    //     a.transform = p;
-                
-    //     let s = app.get_mut_scene(&play_scene_idx);
-    //     s.effects.push( effect::Effect::MoveActor{actor_id:camera_idx,       vector:unit::Position{x:-1.0, y:0.0}} );
-    //     s.effects.push( effect::Effect::MoveActor{actor_id:player_actor_id, vector:unit::Position{x :1.0, y:0.0}} );    
-    //     s.effects.push( effect::Effect::ProcessInput );     
-    //     s.effects.push( effect::Effect::UpdateScore{actor_id:text_id});
-
-    //     let mut p_pos = center.clone();
-    //     p_pos.x = 10.0;
-    //     s.start_effects.push( effect::Effect::PlaceActor{actor_id:player_actor_id, position: p_pos} );
-    //     s.start_effects.push( effect::Effect::PlaceActor{actor_id:camera_idx, position:  unit::Position{ x:0 as f32, y:0 as f32}} );
-    //     s.start_effects.push( effect::Effect::SetScore{new_value : 0} );
-    //     for i in actor_ids.iter() {
-    //         s.start_effects.push( effect::Effect::ResetActor{actor_id : *i} );
-    //     }
-        
-        
-    // }
-    // let [lose_rect1_idx, win_rect_idx, lose_rect2_idx]  = app.add_end_rects(50.0, &play_scene_idx);
-    // {
-    //     let a = app.actors.get_mut(&win_rect_idx).unwrap();   
-    //     if let render::Renderable::DynamicRect{ref mut color, ..} = a.drawable {
-    //         *color = color::GREY;
-    //     }         
-    // }
-
-    // let lose_scene_idx = app.create_scene("Game Over".to_string());
-    // {        
-    //     let text_idx = app.add_text("Game Over".to_string(), text::title_style(), true, &lose_scene_idx, true);
-    //     let a = app.actors.get_mut(&text_idx).unwrap();
-    //     a.transform = center;
-    //     let s = app.get_mut_scene(&lose_scene_idx);
-    //     let auto_transition = effect::Effect::AutoNextScene{duration:3.0, cur_scene_idx : lose_scene_idx, next_scene_idx : intro_scene_idx};        
-    //     s.effects.push( auto_transition );
-    // }
-    // let win_scene_idx = app.create_scene("Victory".to_string());
-    // {        
-    //     let text_idx = app.add_text("Victory".to_string(), text::title_style(), true, &win_scene_idx, true);
-    //     let a = app.actors.get_mut(&text_idx).unwrap();
-    //     a.transform = center;
-    //     let s = app.get_mut_scene(&win_scene_idx);
-    //     let auto_transition = effect::Effect::AutoNextScene{duration:3.0, cur_scene_idx : win_scene_idx, next_scene_idx : intro_scene_idx};        
-    //     s.effects.push( auto_transition );
-    // }
-
-    // {
-    //     // let s = app.get_mut_scene(&intro_scene_idx);
-    //     // let auto_transition = effect::Effect::AutoNextScene{duration:3.0, cur_scene_idx : intro_scene_idx, next_scene_idx : tutorial_idx};        
-    //     // s.effects.push( auto_transition );
-    // }
-    // {
-    //     let s = app.get_mut_scene(&tutorial_idx);
-    //     let auto_transition = effect::Effect::AutoNextScene{duration:3.0, cur_scene_idx : tutorial_idx, next_scene_idx : play_scene_idx};        
-    //     s.effects.push( auto_transition );
-    // }
-    // {
-    //     let lose_game_transition = effect::Effect::AutoNextScene{duration:0.0, cur_scene_idx : play_scene_idx, next_scene_idx : lose_scene_idx};
-    //     let a = app.actors.get_mut(&lose_rect1_idx).unwrap();
-    //     a.on_collision.push(lose_game_transition);    
-    //     let a2 = app.actors.get_mut(&lose_rect2_idx).unwrap();
-    //     a2.on_collision.push(lose_game_transition);        
-
-    //     let win_game_transition = effect::Effect::AutoNextScene{duration:0.0, cur_scene_idx : play_scene_idx, next_scene_idx : win_scene_idx};
-    //     let a2 = app.actors.get_mut(&win_rect_idx).unwrap();                
-    //     a2.on_collision.push(win_game_transition);        
-    // }
-
-    // app.current_scene = intro_scene_idx;
+    let mut app = App::new(&mut ctx, screen);
 
     connect_levels(&mut app, &mut ctx);
           
-
     // Run!
     match event::run(&mut ctx, &mut event_loop, &mut app) {
         Ok(_) => println!("Exited cleanly."),

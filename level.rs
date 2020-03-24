@@ -13,6 +13,7 @@ use crate::GameState;
 use crate::actors;
 use crate::cell;
 use crate::mesh_gen;
+use crate::{Systems};
 
 fn random_rect(maxsize : f32, world_size : &Size) -> (Position, Size) {
     let mut rng = rand::thread_rng();
@@ -78,7 +79,7 @@ impl World{
     }
 
     // pub fn start(&mut self, ctx: &Context, input : &super::InputState){
-    pub fn start(&mut self, ctx: &Context, state : &GameState){
+    pub fn start(&mut self, ctx: &Context, state : &GameState, systems : &mut Systems){
         self.active = true;
         //
         let wb = WorldBounds{min: self.get_camera_actor().transform, max:self.size};
@@ -89,7 +90,7 @@ impl World{
         for a in &mut self.actors{
             for effs in self.start_effects.get_mut(&a.id){
                 for e in effs{
-                    e.on_actor(a, ctx, state, &wb );
+                    e.on_actor(a, ctx, state, &wb, systems );
                 }
             }
         }
@@ -160,7 +161,7 @@ impl World{
         
     }
 
-    pub fn update(&mut self, ctx: &Context, state : &GameState ) -> WorldChange {
+    pub fn update(&mut self, ctx: &Context, state : &GameState, systems : &mut Systems ) -> WorldChange {
         self.process_collisions();
 
         let mut default_wc = WorldChange::default();
@@ -170,7 +171,7 @@ impl World{
             for effs in self.effects.get_mut(&a.id){
                 
                 for (i, e) in effs.iter_mut().enumerate(){
-                    if let Some(wc) = e.on_actor(a, ctx, state, &wb ){
+                    if let Some(wc) = e.on_actor(a, ctx, state, &wb, systems ){
                         if let Some(_) = wc.level{
                             return wc;
                         } else{
@@ -323,7 +324,7 @@ impl WorldBuilder{
     }
 }
 
-type LevelLoader = fn(&Level, &mut GameState, &mut render::Renderer, &mut Context) -> World;
+type LevelLoader = fn(&Level, &mut GameState, &mut Systems, &mut Context) -> World;
 
 
 #[derive(Clone)]
@@ -348,8 +349,8 @@ impl Level{
         self.transitions.insert(transition_name.clone(), level.id.clone());
     }
 
-    pub fn load(&self, state: &mut GameState, renderer: &mut render::Renderer, ctx: &mut Context) -> World {
-        return (self.loader)(self, state, renderer, ctx);
+    pub fn load(&self, state: &mut GameState, systems: &mut Systems, ctx: &mut Context) -> World {
+        return (self.loader)(self, state, systems, ctx);
     }
 
     pub fn get_transition_effect(&self, transition_name : String, duration: f32) -> effect::Effect{
@@ -359,12 +360,12 @@ impl Level{
     
 }
 
-fn emptyload(level : &Level, state: &mut GameState, _renderer: &mut render::Renderer, _ctx: &mut Context) -> World {
+fn emptyload(level : &Level, state: &mut GameState, _systems: &mut Systems, _ctx: &mut Context) -> World {
     let wb = WorldBuilder::new(level.name.clone());
     wb.build()
 } 
 
-pub fn introload(level : &Level, state: &mut GameState, _renderer: &mut render::Renderer, _ctx: &mut Context) -> World {
+pub fn introload(level : &Level, state: &mut GameState, _systems: &mut Systems, _ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
 
     let center = Position{x: state.screen.x /2.0, y: state.screen.y /2.0 };
@@ -380,12 +381,24 @@ pub fn introload(level : &Level, state: &mut GameState, _renderer: &mut render::
     wb.build()
 } 
 
-pub fn tutoload(level : &Level, state: &mut GameState, _renderer: &mut render::Renderer, _ctx: &mut Context) -> World {
+pub fn tutoload(level : &Level, state: &mut GameState, _systems: &mut Systems, _ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
 
-    let center = Position{x: state.screen.x /2.0, y: state.screen.y /2.0 };
+    let y_step = state.screen.y /5.0;
+    let center = Position{x: state.screen.x /2.0, y: y_step*2.0};
 
-    let tuto_text = "Don't crash on the cavern walls and catch the yellow blocks.".to_string();
+    let tuto_text = format!( "Level {}", state.level);
+    let id = wb.add_text(tuto_text, text::title_style(),true);         
+    wb.get_mut_actor(&id).unwrap().transform = center;        
+
+    let center = Position{x: state.screen.x /2.0, y: y_step*3.0};
+    let tuto_text = "Don't crash on the cavern walls...".to_string();
+    let id = wb.add_text(tuto_text, text::tuto_style(),true);     
+    wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string(), 3.0), false );
+    wb.get_mut_actor(&id).unwrap().transform = center;        
+
+    let center = Position{x: state.screen.x /2.0, y: y_step*4.0};
+    let tuto_text = "and catch the yellow blocks.".to_string();
     let id = wb.add_text(tuto_text, text::tuto_style(),true);     
     wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string(), 3.0), false );
     wb.get_mut_actor(&id).unwrap().transform = center;        
@@ -394,7 +407,9 @@ pub fn tutoload(level : &Level, state: &mut GameState, _renderer: &mut render::R
     wb.build()
 }
 
-pub fn gameoverload(level : &Level, state: &mut GameState, _renderer: &mut render::Renderer, _ctx: &mut Context) -> World {
+pub fn gameoverload(level : &Level, state: &mut GameState, _systems: &mut Systems, _ctx: &mut Context) -> World {
+    state.level =0;
+    
     let mut wb = WorldBuilder::new(level.name.clone());
 
     let center = Position{x: state.screen.x /2.0, y: state.screen.y /2.0 };
@@ -407,12 +422,14 @@ pub fn gameoverload(level : &Level, state: &mut GameState, _renderer: &mut rende
     wb.build()
 } 
 
-pub fn victoryload(level : &Level, state: &mut GameState, _renderer: &mut render::Renderer, _ctx: &mut Context) -> World {
+pub fn victoryload(level : &Level, state: &mut GameState, _systems: &mut Systems, _ctx: &mut Context) -> World {
+    state.level +=1;
+
     let mut wb = WorldBuilder::new(level.name.clone());
 
     let center = Position{x: state.screen.x /2.0, y: state.screen.y /2.0 };
 
-    let id = wb.add_text("Victory".to_string(), text::title_style(),false);     
+    let id = wb.add_text("Victory".to_string(), text::title_style(),true);     
     wb.add_effect_to_actor( &id, level.get_transition_effect("next".to_string(), 3.0), false );
     wb.get_mut_actor(&id).unwrap().transform = center;        
 
@@ -420,10 +437,12 @@ pub fn victoryload(level : &Level, state: &mut GameState, _renderer: &mut render
     wb.build()
 } 
 
-pub fn playload(level : &Level, state: &mut GameState, renderer: &mut render::Renderer, ctx: &mut Context) -> World {
+pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
     wb.set_size(Size{x:((state.level+1) as f32)*1000.0, y:600.0});
-    state.level +=1;
+
+    // let renderer = &mut systems.renderer;
+    
 
     let section_length = Bounds1D{min:10.0, max:100.0};
     let (mut top, mut bottom) = terrain::build_tunnel2(&wb.w.size, &section_length, 50.0);
@@ -438,16 +457,16 @@ pub fn playload(level : &Level, state: &mut GameState, renderer: &mut render::Re
         let mut mb = render::MeshBuilderOps::new();    
         let b = Bounds2D{min: Size{x:0.0, y:0.0}, max: wb.w.size};
         let pts = terrain::build_sky(&b);        
-        mb = mb.polygon(pts, color::DARKBLUE);        
-        let drawable = mb.build(renderer, ctx);
+        mb = mb.polygon(&pts, color::DARKBLUE);        
+        let drawable = mb.build(&mut systems.renderer, ctx);
         a.drawable = drawable;
         wb.add_to_world(a);
 
         //TUNNEL TOP
         let mut a = actors::ActorType::Background.make();
         let mut mb = render::MeshBuilderOps::new();    
-        mb = mb.polygon(top.clone(), color::GREEN);    
-        let drawable = mb.build(renderer, ctx);
+        mb = mb.polygon(&top, color::GREEN);    
+        let drawable = mb.build(&mut systems.renderer, ctx);
         a.drawable = drawable;
         a.collision = actors::mk_polycol(&top);
         a.on_collision.push(level.get_transition_effect("lose".to_string(), 0.0));                
@@ -457,8 +476,8 @@ pub fn playload(level : &Level, state: &mut GameState, renderer: &mut render::Re
         //TUNNEL BOTTOM
         let mut a = actors::ActorType::Background.make();
         let mut mb = render::MeshBuilderOps::new();    
-        mb = mb.polygon(bottom.clone(), color::GREEN);    
-        let drawable = mb.build(renderer, ctx);
+        mb = mb.polygon(&bottom, color::GREEN);    
+        let drawable = mb.build(&mut systems.renderer, ctx);
         a.drawable = drawable;
         a.collision = actors::mk_polycol(&bottom);
         a.on_collision.push(level.get_transition_effect("lose".to_string(), 0.0));                
@@ -492,7 +511,7 @@ pub fn playload(level : &Level, state: &mut GameState, renderer: &mut render::Re
         // //     mb = mb.polygon(pts, *c);        
         // // }
         
-        // let drawable = mb.build(renderer, ctx);
+        // let drawable = mb.build(&systems.renderer, ctx);
         // a.drawable = drawable;
         // wb.add_to_world(a);
 
@@ -506,7 +525,8 @@ pub fn playload(level : &Level, state: &mut GameState, renderer: &mut render::Re
     cells2.shuffle(& mut rng);    
     {
         let max_size = 50.0;
-        // let sound_idx = wb.add_sound("/Randomize6.wav".to_string(), &mut ctx);
+        
+        
         for c in cells2.iter().skip(1).take(cells2.len()-2){
             let p = cell::place_disc_in_cell(&c, &mut rng);
             let id = wb.add_antagonist(max_size);
@@ -514,11 +534,20 @@ pub fn playload(level : &Level, state: &mut GameState, renderer: &mut render::Re
             let a = wb.get_mut_actor(&id).unwrap();
 
             let pts = mesh_gen::regular_polygon(10.0, 5);
-            let mut mb  = render::MeshBuilderOps::new();
-            mb = mb.polygon(pts.clone(), color::random_foreground_color());
-            a.drawable = mb.build(renderer, ctx);
+
             a.collision = actors::mk_polycol(&pts);            
-            a.on_collision.push(effect::Effect::KillActor{actor_id:a.id.clone()});                        
+            let poly = render::RenderedPoly{positions: pts, color: color::random_foreground_color()};
+            systems.renderer.polygons.push(poly);
+            // let mut mb  = render::MeshBuilderOps::new();
+            // mb = mb.polygon(pts.clone(), color::random_foreground_color());
+            // a.drawable = mb.build(&systems.renderer, ctx);
+            a.drawable = render::Renderable::DynamicPoly{poly_idx: &systems.renderer.polygons.len()-1, mesh_oidx: None, dirty: true};            
+            a.on_collision.push( effect::Effect::KillActor{actor_id:a.id.clone()});   
+            let sound_oidx = systems.get_sound("/Randomize6.wav");
+            if let Some(sound_idx) = sound_oidx{
+                a.on_collision.push( effect::Effect::PlaySound(*sound_idx));
+            }
+            
             a.transform = p;            
         }
     }
@@ -534,7 +563,7 @@ pub fn playload(level : &Level, state: &mut GameState, renderer: &mut render::Re
 
     // PLAYER
     {
-        let c = &cells[2];        
+        let c = &cells[1];        
         let player_start = c.get_center();        
         let player_actor_id = wb.add_player();
         let eff = effect::Effect::MoveActor{actor_id:player_actor_id, vector:Position{x :1.0, y:0.0}};
@@ -560,7 +589,7 @@ pub fn playload(level : &Level, state: &mut GameState, renderer: &mut render::Re
         let ui_pos =Position{x: 10.0, y: 10.0}; 
         wb.get_mut_actor(&text_id).map(|a|{
             a.transform = ui_pos.clone();    
-            a.drawable = renderer.convert_to_static_text(&a.drawable);
+            a.drawable = systems.renderer.convert_to_static_text(&a.drawable);
             a
         });
 
@@ -568,7 +597,7 @@ pub fn playload(level : &Level, state: &mut GameState, renderer: &mut render::Re
         let mut p = ui_pos.clone();
         if let Some(a) = wb.get_actor(&text_id){
             if let render::Renderable::StaticText(i) = a.drawable{
-                let (w, _) = renderer.texts[i].text.dimensions(ctx);
+                let (w, _) = systems.renderer.texts[i].text.dimensions(ctx);
                 p.x = a.transform.x+(w as f32) +margin;        
             }
         }

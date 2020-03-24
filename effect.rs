@@ -6,6 +6,7 @@ use crate::GameState;
 use crate::color;
 use crate::actors;
 use crate::level;
+use crate::{Systems};
 use ggez::timer;
 
 use ggez::audio::{SoundSource};
@@ -22,7 +23,7 @@ pub enum Effect{
     ResetActor{actor_id: Id},
     // NextScene{cur_scene_idx : usize, next_scene_idx : usize},
     AutoNextScene{ duration : f32, cur_scene_idx : Id, next_scene_idx : Id},
-    PlaySound{sound_index : Id},
+    PlaySound(usize),
 }
 
 impl Effect{
@@ -35,7 +36,7 @@ impl Effect{
         }        
     } 
 
-    pub fn on_actor(&mut self, _actor : &mut actors::Actor, _ctx: &Context, state : &GameState, worldbounds : &level::WorldBounds) -> Option::<level::WorldChange>{        
+    pub fn on_actor(&mut self, _actor : &mut actors::Actor, _ctx: &Context, state : &GameState, worldbounds : &level::WorldBounds, systems : &mut Systems) -> Option::<level::WorldChange>{        
         match self {
             Effect::AutoNextScene{duration, cur_scene_idx, next_scene_idx} => {
                 *duration -= timer::delta(_ctx).as_secs_f32();
@@ -52,6 +53,12 @@ impl Effect{
             Effect::KillActor{actor_id} => {                
                 if let render::Renderable::DynamicRect{ref mut color, ..} = _actor.drawable {
                     *color = color::GREEN;
+                }      
+                if let render::Renderable::DynamicPoly{poly_idx, ref mut mesh_oidx, ref mut dirty} = _actor.drawable {
+                    systems.renderer.polygons.get_mut(poly_idx).map(|poly| {
+                        poly.color = color::GREEN;
+                    });
+                    *dirty = true;
                 }                 
                 _actor.ticking = false;       
                 _actor.collision = actors::mk_nocol();         
@@ -62,7 +69,6 @@ impl Effect{
                 })
             },
             Effect::ProcessInput => {         
-
                 player_handle_input(&state.input, _actor, &worldbounds, timer::delta(_ctx).as_millis());
                 None
             },
@@ -81,11 +87,11 @@ impl Effect{
                 }
                 None
             },
-            // Effect::PlaySound{sound_index} => {
-            //     let s = app.sounds.get_mut(sound_index).unwrap();
-            //     let _ = s.play();
-            //     return true;
-            // },
+            Effect::PlaySound(sound_index) => {
+                let s = systems.sounds.get_mut(*sound_index).unwrap();
+                let _ = s.play();      
+                None          
+            },
             _ => None
         }
         

@@ -6,15 +6,21 @@ use crate::unit::*;
 use crate::text;
 use std::collections::HashMap;
 
+pub struct RenderedPoly{
+    pub positions: Vec::<Position>,
+    pub color: Color
+}
+
 
 pub struct RenderedText{
-    pub text: graphics::Text, 
-    text_anchor: TextAnchor 
+    pub text: graphics::Text,
+    text_anchor: TextAnchor
 }
 
 pub struct Renderer{
     pub fonts  : HashMap::<String, graphics::Font>,
     pub mb     : graphics::MeshBuilder,
+    pub polygons: Vec::<RenderedPoly>,
     pub meshes : Vec::<Mesh>,
     pub texts  : Vec::<RenderedText>,
     cam_tr     : Position
@@ -23,12 +29,13 @@ pub struct Renderer{
 impl Renderer{
     pub fn new() -> Renderer{
         Renderer{
-            fonts  : HashMap::<String, graphics::Font>::new(),
-            mb     : graphics::MeshBuilder::new(),
-            meshes : Vec::<Mesh>::new(),
-            texts  : Vec::<RenderedText>::new(),
-            cam_tr : super::unit::Position{x: 0.0, y:0.0}
-        } 
+            fonts   : HashMap:: <String, graphics:: Font>:: new(),
+            mb      : graphics:: MeshBuilder:: new(),
+            polygons: Vec::<RenderedPoly>::new(),
+            meshes  : Vec::<Mesh>::new(),
+            texts   : Vec::<RenderedText>::new(),
+            cam_tr  : super::unit::Position{x: 0.0, y:0.0}
+        }
     }
 
     pub fn start_frame(&mut self, ctx: &mut Context, t : super::unit::Position){
@@ -44,7 +51,7 @@ impl Renderer{
 
     pub fn pop_cam_transform(&mut self, ctx: &mut Context){
         graphics::pop_transform(ctx);
-        graphics::apply_transformations(ctx).unwrap();       
+        graphics::apply_transformations(ctx).unwrap();
     }
 
     pub fn start_batch(&mut self) {
@@ -58,22 +65,22 @@ impl Renderer{
     pub fn end_frame(&self, ctx: &mut Context) -> GameResult<()>{
         return graphics::present(ctx);
     }
-    
+
 
     pub fn convert_to_static_text(&mut self, drawable : &Renderable) -> Renderable {
         if let Renderable::DynamicTextDraw{string, fontstyle, text_anchor} = drawable{
             let font = self.fonts[&fontstyle.name];
-            let gtext = graphics::Text::new((string.clone(), font, fontstyle.size));        
+            let gtext = graphics::Text::new((string.clone(), font, fontstyle.size));
             let d = RenderedText{ text: gtext, text_anchor : *text_anchor };
             self.texts.push(d);
             return Renderable::StaticText(self.texts.len() -1 );
         };
         Renderable::NoDraw
         // let font    = self.renderer.fonts[&fontstyle.name];
-        // let gtext   = graphics::Text::new((text.clone(), font, fontstyle.size));        
-        // if static_{                        
+        // let gtext   = graphics::Text::new((text.clone(), font, fontstyle.size));
+        // if static_{
         //     let text_anchor = if centered  {render::TextAnchor::Center} else {render::TextAnchor::TopLeft};
-        //     a.drawable  = render::Renderable::StaticText{ text: gtext, text_anchor : text_anchor };            
+        //     a.drawable  = render::Renderable::StaticText{ text: gtext, text_anchor : text_anchor };
     }
 }
 
@@ -88,13 +95,13 @@ impl MeshBuilderOps{
         }
     }
 
-    pub fn polygon(mut self, pts : Vec::<Position>, color: Color) -> MeshBuilderOps{
+    pub fn polygon(mut self, pts : &Vec::<Position>, color: Color) -> MeshBuilderOps{
         // DrawMode::Stroke(StrokeOptions::default())
         let _ = self.mb.polygon(DrawMode::fill(), &pts, color);
         self
     }
 
-    pub fn polyline(mut self, pts : Vec::<Position>,width: f32, color: Color) -> MeshBuilderOps{        
+    pub fn polyline(mut self, pts : &Vec::<Position>,width: f32, color: Color) -> MeshBuilderOps{
         let _ = self.mb.polygon(DrawMode::stroke(width), &pts, color);
         self
     }
@@ -113,6 +120,17 @@ impl MeshBuilderOps{
         renderer.meshes.push(mesh);
         Renderable::StaticMesh( renderer.meshes.len() - 1)
     }
+
+    pub fn build_at(self, renderer  : &mut Renderer, ctx : &mut Context, idx : usize) {
+        let mesh = self.mb.build(ctx).unwrap();
+        renderer.meshes.insert(idx, mesh);        
+    }
+
+    pub fn build_(self, renderer  : &mut Renderer, ctx : &mut Context) -> usize {
+        let mesh = self.mb.build(ctx).unwrap();
+        renderer.meshes.push(mesh);
+        renderer.meshes.len() - 1
+    }
 }
 
 
@@ -120,7 +138,7 @@ impl MeshBuilderOps{
 
 
 pub enum TextRenderState{
-    Dirty,    
+    Dirty,
     TextState(graphics::Text),
 }
 
@@ -134,17 +152,18 @@ pub enum Renderable{
     NoDraw,
     StaticMesh(usize),
     StaticText(usize),
-    DynamicRect{ color : Color, size : Size},    
+    DynamicPoly{poly_idx:usize, mesh_oidx:Option<usize>, dirty:bool},
+    DynamicRect{ color : Color, size : Size},
     DynamicTextDraw { string: String, fontstyle : text::FontStyle, text_anchor : TextAnchor},
-    
+
 }
 
 impl Renderable {
-    pub fn draw(&self, transform : super::unit::Position, renderer : &mut Renderer, ctx : &mut Context){
+    pub fn draw(&mut self, transform : super::unit::Position, renderer : &mut Renderer, ctx : &mut Context){
         match self {
             Renderable::NoDraw => (),
             Renderable::StaticMesh(idx) => {
-                let _ = renderer.meshes[*idx].draw(ctx, DrawParam::default().dest(transform));    
+                let _ = renderer.meshes[*idx].draw(ctx, DrawParam::default().dest(transform));
             },
             Renderable::StaticText(idx) => {
                 let rtext = &renderer.texts[*idx];
@@ -152,8 +171,23 @@ impl Renderable {
                 if let TextAnchor::Center = rtext.text_anchor {
                     t.x -= rtext.text.width(ctx) as f32 / 2.0;
                     t.y -= rtext.text.height(ctx) as f32;
-                }                
+                }
                 let _ = rtext.text.draw(ctx, DrawParam::default().dest(t));
+            },
+            Renderable::DynamicPoly{poly_idx, ref mut mesh_oidx, dirty} => {
+                if *dirty {
+                    let mut mb = MeshBuilderOps::new();
+                    let poly = &renderer.polygons[*poly_idx];
+                    mb = mb.polygon(&poly.positions, poly.color);
+                    if let Some(ref mut mesh_idx) = mesh_oidx{
+                        mb.build_at(renderer, ctx, *mesh_idx);
+                    } else {
+                        *mesh_oidx = Some(mb.build_(renderer, ctx));                        
+                    }                    
+                } 
+                if let Some(mesh_idx) = mesh_oidx{
+                    let _ = renderer.meshes[*mesh_idx].draw(ctx, DrawParam::default().dest(transform));
+                }
             },
             Renderable::DynamicRect{color, size} => {
                 renderer.mb.rectangle(
@@ -166,17 +200,17 @@ impl Renderable {
                     },
                     *color,
                 );
-            },                  
+            },
             Renderable::DynamicTextDraw{string, fontstyle, text_anchor } => {
                 let font = renderer.fonts[&fontstyle.name];
-                let text = graphics::Text::new( (string.clone() , font, fontstyle.size) );                
+                let text = graphics::Text::new( (string.clone() , font, fontstyle.size) );
                 let mut t =  transform.clone();
                 if let TextAnchor::Center = text_anchor {
                     t.x -= text.width(ctx) as f32 / 2.0;
                     t.y -= text.height(ctx) as f32;
-                }   
+                }
                 let _ = text.draw(ctx, DrawParam::default().dest(t).color(fontstyle.color));
-            }            
-        } 
+            }
+        }
     }
 }

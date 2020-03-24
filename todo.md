@@ -16,15 +16,21 @@
 - camera border.
 
 ## v0.0.4 <---
-- ship design
 - tunnel
-- main menu
--  
+- increasing levels
+- sound ? -> systems.
 
-
-
-
-
+## v0.0.5
 - layout ( ui )
+- minimal animation on crystals
 
+
+## later
+- animation
+- main menu
+- highscore
+- enemies
+- ship design
+- musics
 - projectile ?
+- end game

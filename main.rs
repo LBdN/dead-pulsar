@@ -12,6 +12,7 @@ use ggez::input::keyboard::KeyCode;
 use ggez::event::KeyMods;
 use ggez::graphics;
 use ggez::conf;
+use ggez::audio;
 
 use crate::unit::*;
 
@@ -59,9 +60,25 @@ pub struct GameState{
     screen : Size
 }
 
+pub struct Systems{
+    pub renderer    : render::Renderer,
+    pub sounds      : Vec::<audio::Source>,
+    pub sound_names : HashMap::<String, usize>
+}
+
+impl Systems{
+    fn add_sound(&mut self, rel_path : String,  ctx : &mut Context) {        
+        let sound = audio::Source::new(ctx, rel_path.clone()).unwrap();
+        self.sounds.push(sound);
+        self.sound_names.insert(rel_path, self.sounds.len() - 1);        
+    }
+    fn get_sound(&self, sound_name: &str) -> Option<&usize>{
+        self.sound_names.get(sound_name)
+    }
+}
 
 pub struct App {    
-    renderer : render::Renderer,
+    systems: Systems,
     state: Option<GameState>,
     levels : Vec::<level::Level>,
     world : level::World,    
@@ -80,7 +97,11 @@ impl App {
         fonts.insert("V5PRD___".to_string(), graphics::Font::new(ctx, "/font/V5PRD___.TTF").unwrap());        
 
         let mut a = App {
-            renderer : render::Renderer::new(),
+            systems : Systems{
+                renderer    : render::Renderer::new(),
+                sounds      : Vec::<audio::Source>::new(),
+                sound_names : HashMap::<String, usize>::new()
+            },            
             state : Some( GameState{
                 score : 0,
                 input : InputState:: default(),
@@ -91,7 +112,8 @@ impl App {
             world : level::World::empty()
         };
 
-        a.renderer.fonts = fonts;
+        a.systems.add_sound("/Randomize6.wav".to_string(), ctx);
+        a.systems.renderer.fonts = fonts;
         a
     }
 
@@ -133,7 +155,7 @@ impl EventHandler for App {
 
         let mut wc = level::WorldChange::default();
         if let Some(state) = self.state.as_ref(){            
-            wc = self.world.update(_ctx, &state);
+            wc = self.world.update(_ctx, &state, &mut self.systems);
         }
 
         if let Some(state) = self.state.as_mut(){
@@ -144,8 +166,8 @@ impl EventHandler for App {
             self.world.stop();            
             let level = (*self.find_level(&level_id).unwrap()).clone();
             let mut state = self.state.as_mut().unwrap();
-            self.world = level.load(&mut state, &mut self.renderer, _ctx);
-            self.world.start(_ctx, state);
+            self.world = level.load(&mut state, &mut self.systems, _ctx);
+            self.world.start(_ctx, state, &mut self.systems);
         }
            
         
@@ -158,17 +180,17 @@ impl EventHandler for App {
 
         let t = self.world.get_camera_actor().transform;
         // let t = self.actors[&self.camera.actor_id].transform;
-        self.renderer.start_frame(ctx, t);
+        self.systems.renderer.start_frame(ctx, t);
             
-        self.renderer.start_batch();
+        self.systems.renderer.start_batch();
             
         // Draw code here...        
         let mut smtg_drawn = false;
         let mut draw_ctx = actors::DrawContext::WorldSpace;        
-        self.renderer.push_cam_transform(ctx);
+        self.systems.renderer.push_cam_transform(ctx);
 
         // for a in self.actors.values() {
-        for a in &self.world.actors {
+        for a in &mut self.world.actors {
             if !a.visible {
                 continue;
             }
@@ -178,28 +200,28 @@ impl EventHandler for App {
 
             if draw_ctx != a.drawctx {
                 if let actors::DrawContext::ScreenSpace = a.drawctx {                    
-                    self.renderer.pop_cam_transform(ctx);
+                    self.systems.renderer.pop_cam_transform(ctx);
                 }
                 if let actors::DrawContext::WorldSpace = a.drawctx{                                        
-                    self.renderer.push_cam_transform(ctx);
+                    self.systems.renderer.push_cam_transform(ctx);
                 }
                 draw_ctx = a.drawctx;
             }
-            a.drawable.draw(a.transform, &mut self.renderer, ctx);
+            a.drawable.draw(a.transform, &mut self.systems.renderer, ctx);
             if let render::Renderable::DynamicRect{color:_, size:_} = a.drawable{
                 smtg_drawn = true;
             }
             
         }    
         if smtg_drawn == true{
-            self.renderer.push_cam_transform(ctx);            
-            self.renderer.end_batch(ctx);            
+            self.systems.renderer.push_cam_transform(ctx);            
+            self.systems.renderer.end_batch(ctx);            
         }
         
 
         let mut draw_ctx = actors::DrawContext::WorldSpace;              
-        self.renderer.pop_cam_transform(ctx);
-        for a in &self.world.actors {
+        self.systems.renderer.pop_cam_transform(ctx);
+        for a in &mut self.world.actors {
             if !a.visible {
                 continue;
             }
@@ -209,17 +231,17 @@ impl EventHandler for App {
 
             if draw_ctx != a.drawctx {
                 if let actors::DrawContext::ScreenSpace = a.drawctx {                    
-                    self.renderer.pop_cam_transform(ctx);                                
+                    self.systems.renderer.pop_cam_transform(ctx);                                
                 }
                 if let actors::DrawContext::WorldSpace = a.drawctx{                                        
-                    self.renderer.push_cam_transform(ctx);
+                    self.systems.renderer.push_cam_transform(ctx);
                 }
                 draw_ctx = a.drawctx;
             }
-            a.drawable.draw(a.transform, &mut self.renderer, ctx);                        
+            a.drawable.draw(a.transform, &mut self.systems.renderer, ctx);                        
         }    
 
-        self.renderer.end_frame(ctx)
+        self.systems.renderer.end_frame(ctx)
     }
 
 
@@ -285,12 +307,12 @@ fn connect_levels(app : &mut App, ctx: &mut Context){
     app.levels.push(play);
     
     let mut state = app.state.as_mut().unwrap();
-    let mut w = app.levels[0].load(&mut state, &mut app.renderer, ctx);
+    let mut w = app.levels[0].load(&mut state, &mut app.systems, ctx);
 
     if let Some(state) = app.state.as_ref(){
         // let input = &app.player.as_ref().unwrap().input.clone();
 
-        w.start(ctx, state);
+        w.start(ctx, state,  &mut app.systems);
         app.world = w;
     }
 

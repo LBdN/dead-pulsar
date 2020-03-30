@@ -164,6 +164,7 @@ impl EventHandler for App {
             
         if let Some(level_id) = wc.level{
             self.world.stop();            
+            self.systems.renderer.clear();
             let level = (*self.find_level(&level_id).unwrap()).clone();
             let mut state = self.state.as_mut().unwrap();
             self.world = level.load(&mut state, &mut self.systems, _ctx);

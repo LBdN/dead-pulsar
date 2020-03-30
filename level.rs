@@ -250,7 +250,7 @@ impl WorldBuilder{
 
     fn add_player(&mut self) -> Id {        
         let size  = Size{x:10.0, y:10.0};        
-        let mut a = super::actors::Actor::new(super::actors::ActorType::Player, get_id());
+        let mut a = actors::ActorType::Player.make();
         self.add_rect_to_actor(&mut a, size, super::color::RED);
         self.w.player_atr_id = a.id.clone();
         self.w.actors.push(a);        
@@ -409,6 +409,7 @@ pub fn tutoload(level : &Level, state: &mut GameState, _systems: &mut Systems, _
 
 pub fn gameoverload(level : &Level, state: &mut GameState, _systems: &mut Systems, _ctx: &mut Context) -> World {
     state.level =0;
+    state.score =0;
     
     let mut wb = WorldBuilder::new(level.name.clone());
 
@@ -444,7 +445,7 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
     // let renderer = &mut systems.renderer;
     
 
-    let section_length = Bounds1D{min:10.0, max:100.0};
+    let section_length = Bounds1D{min:50.0, max:100.0};
     let (mut top, mut bottom) = terrain::build_tunnel2(&wb.w.size, &section_length, 50.0);
     terrain::invert_pos(&wb.w.size, &mut top, false);
     terrain::invert_pos(&wb.w.size, &mut bottom, false);
@@ -518,30 +519,31 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
         
     }
     
-    // ENEMIES
+    // CRYSTALS
     
     let mut rng = rand::thread_rng();    
     let mut cells2 = cells.clone();
     cells2.shuffle(& mut rng);    
     {
-        let max_size = 50.0;
+        let max_size = 10.0;
         
         
         for c in cells2.iter().skip(1).take(cells2.len()-2){
-            let p = cell::place_disc_in_cell(&c, &mut rng);
+            let dist    = rng.gen_range(2.0, max_size) as f32;
+            let c2 = c.get_shrinked(dist);
+
+            let p = cell::place_disc_in_cell(&c2, &mut rng);
             let id = wb.add_antagonist(max_size);
             wb.add_effect_to_actor(&id, effect::Effect::ResetActor{actor_id : id.clone()}, true);
             let a = wb.get_mut_actor(&id).unwrap();
 
-            let pts = mesh_gen::regular_polygon(10.0, 5);
+            
+            let dist    = rng.gen_range(2.0, max_size) as f32;
 
-            a.collision = actors::mk_polycol(&pts);            
-            let poly = render::RenderedPoly{positions: pts, color: color::random_foreground_color()};
-            systems.renderer.polygons.push(poly);
-            // let mut mb  = render::MeshBuilderOps::new();
-            // mb = mb.polygon(pts.clone(), color::random_foreground_color());
-            // a.drawable = mb.build(&systems.renderer, ctx);
-            a.drawable = render::Renderable::DynamicPoly{poly_idx: &systems.renderer.polygons.len()-1, mesh_oidx: None, dirty: true};            
+            let pts = mesh_gen::regular_polygon(dist, 5);
+
+            a.collision = actors::mk_polycol(&pts);      
+            a.drawable = systems.renderer.add_dynamic_poly(&pts, color::random_foreground_color());                  
             a.on_collision.push( effect::Effect::KillActor{actor_id:a.id.clone()});   
             let sound_oidx = systems.get_sound("/Randomize6.wav");
             if let Some(sound_idx) = sound_oidx{
@@ -565,7 +567,17 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
     {
         let c = &cells[1];        
         let player_start = c.get_center();        
-        let player_actor_id = wb.add_player();
+        // let player_actor_id = wb.add_player();
+
+        let mut a = actors::ActorType::Player.make();
+        let pts = mesh_gen::base_ship(5.0);
+        a.collision = actors::mk_polycol(&pts);      
+        a.drawable = systems.renderer.add_dynamic_poly(&pts, color::GREY);
+        let player_actor_id = wb.add_to_world(a);
+        wb.w.player_atr_id = player_actor_id.clone();
+
+
+
         let eff = effect::Effect::MoveActor{actor_id:player_actor_id, vector:Position{x :1.0, y:0.0}};
         wb.add_effect_to_actor(&player_actor_id, eff, false);
         wb.add_effect_to_actor(&player_actor_id, effect::Effect::ProcessInput, false);

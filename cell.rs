@@ -2,7 +2,6 @@ use nalgebra as na;
 use crate::unit::{Position};
 use rand::Rng;
 use rand::rngs::ThreadRng;
-use mint::Point2 as pp2;
 
 type Vector2 = na::Vector2::<f32>;
 type Point2  = na::Point2::<f32>;
@@ -95,9 +94,37 @@ impl Cell {
         p.y += self.x00.y;
         p
     }
+
+    pub fn get_shrinked(&self, dist: f32) -> Cell {
+        let [vy, vx1, vx2] = self.get_vectors();
+        let x00 = on_bisector_at(&self.x00, &vy, &vx1, dist);
+        let x01 = on_bisector_at(&self.x01, &-vy, &vx2, dist);
+
+        let o11 = Point2::from(self.x11);
+        let o10 = Point2::from(self.x10);
+        let vy = o11 - o10;        
+        let x11 = on_bisector_at(&self.x11, &-vy, &-vx2, dist);        
+        let x10 = on_bisector_at(&self.x10, &vy, &-vx1, dist);
+        Cell{
+            x00 : x00.into(),
+            x01 : x01.into(),
+            x10 : x10.into(),
+            x11 : x11.into(),
+        }
+    }
 }
 
-  pub fn place_disc_in_cell(cell : &Cell, rng :&mut ThreadRng) -> Position  {
+fn on_bisector_at(p: &Position, vy : &Vector2, vx: &Vector2, dist: f32) -> Point2{    
+    let alpha = vy.angle(&vx);
+    let angle = alpha / 2.0;
+    let length = dist / angle.sin();
+    let v = ((vy.norm() * vx) + (vx.norm()* vy)).normalize() * length;
+    Point2::from(p.clone()) + v
+}
+
+
+
+pub fn place_disc_in_cell(cell : &Cell, rng :&mut ThreadRng) -> Position  {
     let x = rng.gen_range(0.0, 1.0);
     let y = rng.gen_range(0.0, 1.0);
     cell.get_point(x, y)    

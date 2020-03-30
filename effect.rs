@@ -54,9 +54,10 @@ impl Effect{
                 if let render::Renderable::DynamicRect{ref mut color, ..} = _actor.drawable {
                     *color = color::GREEN;
                 }      
-                if let render::Renderable::DynamicPoly{poly_idx, ref mut mesh_oidx, ref mut dirty} = _actor.drawable {
+                if let render::Renderable::DynamicPoly{poly_idx, mesh_oidx, ref mut dirty} = _actor.drawable {
                     systems.renderer.polygons.get_mut(poly_idx).map(|poly| {
                         poly.color = color::GREEN;
+                        poly
                     });
                     *dirty = true;
                 }                 
@@ -90,7 +91,11 @@ impl Effect{
             Effect::PlaySound(sound_index) => {
                 let s = systems.sounds.get_mut(*sound_index).unwrap();
                 let _ = s.play();      
-                None          
+                Some(level::WorldChange {
+                    score: 0,
+                    level: None,
+                    dead_effect: true
+                })          
             },
             _ => None
         }

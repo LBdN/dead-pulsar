@@ -38,6 +38,12 @@ impl Renderer{
         }
     }
 
+    pub fn clear(&mut self){
+        self.polygons.clear();
+        self.meshes.clear();
+        self.texts.clear();
+    }
+
     pub fn start_frame(&mut self, ctx: &mut Context, t : super::unit::Position){
         graphics::clear(ctx, graphics::BLACK);
         self.cam_tr = t;
@@ -82,6 +88,12 @@ impl Renderer{
         //     let text_anchor = if centered  {render::TextAnchor::Center} else {render::TextAnchor::TopLeft};
         //     a.drawable  = render::Renderable::StaticText{ text: gtext, text_anchor : text_anchor };
     }
+
+    pub fn add_dynamic_poly(&mut self, pts : &Vec<Position>, color : Color) -> Renderable{
+        let poly = RenderedPoly{positions: pts.clone(), color: color};
+        self.polygons.push(poly);
+        Renderable::DynamicPoly{poly_idx: &self.polygons.len()-1, mesh_oidx: None, dirty: true}
+    }
 }
 
 pub struct MeshBuilderOps{
@@ -123,7 +135,7 @@ impl MeshBuilderOps{
 
     pub fn build_at(self, renderer  : &mut Renderer, ctx : &mut Context, idx : usize) {
         let mesh = self.mb.build(ctx).unwrap();
-        renderer.meshes.insert(idx, mesh);        
+        renderer.meshes[idx] = mesh;        
     }
 
     pub fn build_(self, renderer  : &mut Renderer, ctx : &mut Context) -> usize {
@@ -179,11 +191,12 @@ impl Renderable {
                     let mut mb = MeshBuilderOps::new();
                     let poly = &renderer.polygons[*poly_idx];
                     mb = mb.polygon(&poly.positions, poly.color);
-                    if let Some(ref mut mesh_idx) = mesh_oidx{
+                    if let Some(ref mesh_idx) = mesh_oidx{
                         mb.build_at(renderer, ctx, *mesh_idx);
                     } else {
                         *mesh_oidx = Some(mb.build_(renderer, ctx));                        
                     }                    
+                    *dirty = false;  
                 } 
                 if let Some(mesh_idx) = mesh_oidx{
                     let _ = renderer.meshes[*mesh_idx].draw(ctx, DrawParam::default().dest(transform));

@@ -529,6 +529,14 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
         
         
         for c in cells2.iter().skip(1).take(cells2.len()-2){
+
+            let is_enemy = rng.gen::<bool>();
+            let color = if is_enemy{
+                color::GREEN
+            } else {
+                color::random_foreground_color()
+            };
+
             let dist    = rng.gen_range(2.0, max_size) as f32;
             let c2 = c.get_shrinked(dist);
 
@@ -543,8 +551,15 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
             let pts = mesh_gen::regular_polygon(dist, 5);
 
             a.collision = actors::mk_polycol(&pts);      
-            a.drawable = systems.renderer.add_dynamic_poly(&pts, color::random_foreground_color());                  
-            a.on_collision.push( effect::Effect::KillActor{actor_id:a.id.clone()});   
+            a.drawable = systems.renderer.add_dynamic_poly(&pts, color);        
+            
+            let eff_on_col = if is_enemy{
+                level.get_transition_effect("lose".to_string(), 0.0)
+            } else {
+                effect::Effect::KillActor{actor_id:a.id.clone()}
+            };
+          
+            a.on_collision.push( eff_on_col );   
             let sound_oidx = systems.get_sound("/Randomize6.wav");
             if let Some(sound_idx) = sound_oidx{
                 a.on_collision.push( effect::Effect::PlaySound(*sound_idx));

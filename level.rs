@@ -441,12 +441,17 @@ pub fn victoryload(level : &Level, state: &mut GameState, _systems: &mut Systems
 pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
     wb.set_size(Size{x:((state.level+1) as f32)*1000.0, y:600.0});
-
-    // let renderer = &mut systems.renderer;
+     
+    let decrease_ratio = 0.65f32;
+    let min_height = (50.0 * 4.0 * decrease_ratio.powi(state.level)).max(50.0);
+    // let min_height = 50.0;
     
 
-    let section_length = Bounds1D{min:50.0, max:100.0};
-    let (mut top, mut bottom) = terrain::build_tunnel2(&wb.w.size, &section_length, 50.0);
+    
+    
+
+    let section_length = Bounds1D{min:min_height, max:min_height*2.0};
+    let (mut top, mut bottom) = terrain::build_tunnel2(&wb.w.size, &section_length, min_height);
     terrain::invert_pos(&wb.w.size, &mut top, false);
     terrain::invert_pos(&wb.w.size, &mut bottom, false);
     let cells = cell::create_cells(&top, &bottom);

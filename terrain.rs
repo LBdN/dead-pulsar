@@ -283,10 +283,12 @@ pub fn build_tunnel2(world_size : &Size, length_bounds : &Bounds1D, min_height: 
         if first {
             first = !first;
         } else {        
-            let cos_a = min_height / current_range.size() ;
-            let max_vert_move = cos_a.acos().tan() * segment_length;
+            // let cos_a = min_height / current_range.size() ;
+            // let max_vert_move = cos_a.acos().tan() * segment_length;
             current_range = get_tunnel_height2(world_range, current_range, min_height, segment_length, &mut rng);
         } 
+        assert!(!length.is_nan());
+        assert!(!current_range.top.is_nan());
         top_pts.push(Position{ x:length, y: current_range.top});
         bot_pts.push(Position{ x:length, y: current_range.bottom});
     }
@@ -347,7 +349,11 @@ fn get_tunnel_height2(world_range : HeightRange, segment_range: HeightRange, min
     
     let radius = min_height;
 
-    if let Some(center_height) = segment_range.place_within(min_height, rng){
+    if distance <= radius {
+        return HeightRange{bottom:segment_range.bottom, top:segment_range.top};
+    }
+
+    if let Some(center_height) = segment_range.place_within(radius, rng){
         let O = Point2::new(0.0f32, center_height);
 
         let mut top_vector_range = VectorRange::empty();
@@ -357,12 +363,16 @@ fn get_tunnel_height2(world_range : HeightRange, segment_range: HeightRange, min
             let P1 = Point2::new(distance, world_range.bottom);
             let OP1 = P1 - O;
             let OP1_norm = OP1.norm();
-            let cos_alpha = min_height / OP1_norm;
+            let cos_alpha = radius / OP1_norm;
             let alpha = cos_alpha.acos();
             let rot_alpha = na::Rotation2::new(-alpha);
-            let OP2  = (rot_alpha * OP1).normalize() * min_height;
+            let OP2  = (rot_alpha * OP1).normalize() * radius;
             let P2   = O + OP2;
             let P2P1 = P1 - P2; // max downward  vector for bottom            
+
+            if P2P1.x.is_nan() || P2P1.y.is_nan() {
+                assert!(false);
+            }
 
             bot_vector_range.downward = P2P1;
             top_vector_range.downward = P2P1;
@@ -372,13 +382,17 @@ fn get_tunnel_height2(world_range : HeightRange, segment_range: HeightRange, min
             let P1 = Point2::new(distance, world_range.top);
             let OP1 = P1 - O;
             let OP1_norm = OP1.norm();
-            let cos_alpha = min_height / OP1_norm;
+            let cos_alpha = radius / OP1_norm;
             let alpha = cos_alpha.acos();
             let rot_alpha = na::Rotation2::new(alpha);
-            let OP2  = (rot_alpha * OP1).normalize() * min_height;
+            let OP2  = (rot_alpha * OP1).normalize() * radius;
             let P2   = O + OP2;
             let P2P1 = P1 - P2; // max upward  vector for top
 
+            if P2P1.x.is_nan() || P2P1.y.is_nan() {
+                assert!(false);
+            }
+            
             bot_vector_range.upward = P2P1;
             top_vector_range.upward = P2P1;
         }
@@ -411,6 +425,9 @@ fn get_tunnel_height2(world_range : HeightRange, segment_range: HeightRange, min
         let top_pt = line1.intersect(line0).unwrap();
         let bot_pt = line2.intersect(line0).unwrap();
         
+        if top_pt.y.is_nan() || bot_pt.y.is_nan() {
+            assert!(false);
+        }        
         return  HeightRange{bottom: bot_pt.y, top: top_pt.y};
         
     }

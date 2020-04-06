@@ -1,4 +1,4 @@
-use ggez::graphics::{Color, BLACK};
+pub use ggez::graphics::{Color, BLACK, WHITE};
 use rand::Rng;
 
 pub const GREY  : Color = Color{ r: 0.5, g:0.5, b:0.5, a:1.0};

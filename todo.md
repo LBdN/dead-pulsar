@@ -15,22 +15,28 @@
 - integration n collide.
 - camera border.
 
-## v0.0.4 <---
+## v0.0.4 
 - tunnel
 - increasing levels
 - sound ? -> systems.
+- ship design
 
-## v0.0.5
+## v0.0.5 <---
+- progression control
 - layout ( ui )
 - minimal animation on crystals
+
+## v0.0.6
+- main menu
+- highscore
+- end game
 
 
 ## later
 - animation
-- main menu
-- highscore
 - enemies
-- ship design
 - musics
 - projectile ?
-- end game
+- better backgrounds
+- itch.io
+

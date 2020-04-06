@@ -466,7 +466,7 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
         //TUNNEL TOP
         let mut a = actors::ActorType::Background.make();
         let mut mb = render::MeshBuilderOps::new();    
-        mb = mb.polygon(&top, color::GREEN);    
+        mb = mb.polygon(&top, color::BLACK);    
         let drawable = mb.build(&mut systems.renderer, ctx);
         a.drawable = drawable;
         a.collision = actors::mk_polycol(&top);
@@ -477,7 +477,7 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
         //TUNNEL BOTTOM
         let mut a = actors::ActorType::Background.make();
         let mut mb = render::MeshBuilderOps::new();    
-        mb = mb.polygon(&bottom, color::GREEN);    
+        mb = mb.polygon(&bottom, color::BLACK);    
         let drawable = mb.build(&mut systems.renderer, ctx);
         a.drawable = drawable;
         a.collision = actors::mk_polycol(&bottom);
@@ -526,18 +526,18 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
     cells2.shuffle(& mut rng);    
     {
         let max_size = 10.0;
-        
-        
+        let min_size = 2.0;
+                
         for c in cells2.iter().skip(1).take(cells2.len()-2){
 
             let is_enemy = rng.gen::<bool>();
             let color = if is_enemy{
-                color::GREEN
+                color::BLACK
             } else {
-                color::random_foreground_color()
+                color::SKYBLUE
             };
 
-            let dist    = rng.gen_range(2.0, max_size) as f32;
+            let dist    = rng.gen_range(min_size, max_size) as f32;
             let c2 = c.get_shrinked(dist);
 
             let p = cell::place_disc_in_cell(&c2, &mut rng);

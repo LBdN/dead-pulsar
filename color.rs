@@ -7,12 +7,16 @@ pub const RED   : Color = Color{ r: 1.0, g:0.0, b:0.0, a:1.0};
 pub const MARROON : Color = Color{ r: 0.5, g:0.0, b:0.0, a:1.0};
 pub const SKYBLUE : Color = Color{ r: 135.0/255.0, g: 206.0/255.0, b:235.0/255.0, a: 1.0};
 pub const DARKBLUE : Color = Color{ r: 11.0/255.0, g: 26.0/255.0, b:79.0/255.0, a: 1.0};
+pub const MEDIUMBLUE :Color = Color{r: 38.0/255.0, g:47.0/255.0, b:79.0/255.0, a:1.0};
+pub const DARKERBLUE :Color = Color{r: 3.7/255.0, g:8.8/255.0, b:26.8/255.0, a:1.0};
+
 
 pub fn random_foreground_color() -> Color{
     let mut rng = rand::thread_rng();
     let r    = 1.0;
+    let g    = rng.gen_range(0.0, 1.0);        
     let b    = rng.gen_range(0.0, 1.0);        
-    Color{r:r, g:r, b:b, a:1.0}
+    Color{r:r, g:g, b:b, a:1.0}
 }
 
 pub fn random_grey_color() -> Color{

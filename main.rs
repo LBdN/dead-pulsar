@@ -334,7 +334,7 @@ fn main() {
     };
 
     let window_setup = conf::WindowSetup::default().title("Dead Pulsar");
-    let window_mode  = conf::WindowMode::default();
+    let window_mode  = conf::WindowMode::default().dimensions( 1280.0, 720.0);
 
     let screen = Size{x: window_mode.width, y :window_mode.height};
 

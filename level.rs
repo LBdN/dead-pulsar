@@ -319,6 +319,15 @@ impl WorldBuilder{
         res 
     }
 
+    fn line_actor(&self, pts : &Vec::<Position>, color : color::Color, systems: &mut Systems, ctx: &mut Context) -> actors::Actor{
+        let mut a = actors::ActorType::Background.make();
+        let mut mb = render::MeshBuilderOps::new();    
+        mb = mb.polyline(&pts, 1.0f32, color);            
+        let drawable = mb.build(&mut systems.renderer, ctx);
+        a.drawable = drawable;
+        a
+    }
+
     fn build(self) -> World{
         self.w
     }
@@ -440,10 +449,10 @@ pub fn victoryload(level : &Level, state: &mut GameState, _systems: &mut Systems
 
 pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
-    wb.set_size(Size{x:((state.level+1) as f32)*1000.0, y:600.0});
+    wb.set_size(Size{x:((state.level+1) as f32)*1000.0, y:720.0});
      
     let decrease_ratio = 0.65f32;
-    let min_height = (50.0 * 4.0 * decrease_ratio.powi(state.level)).max(50.0);
+    let min_height = (50.0 * 3.0 * decrease_ratio.powi(state.level)).max(50.0);
     // let min_height = 50.0;
     
 
@@ -463,7 +472,7 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
         let mut mb = render::MeshBuilderOps::new();    
         let b = Bounds2D{min: Size{x:0.0, y:0.0}, max: wb.w.size};
         let pts = terrain::build_sky(&b);        
-        mb = mb.polygon(&pts, color::DARKBLUE);        
+        mb = mb.polygon(&pts, color::DARKBLUE);                
         let drawable = mb.build(&mut systems.renderer, ctx);
         a.drawable = drawable;
         wb.add_to_world(a);
@@ -472,6 +481,7 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
         let mut a = actors::ActorType::Background.make();
         let mut mb = render::MeshBuilderOps::new();    
         mb = mb.polygon(&top, color::BLACK);    
+        mb = mb.polyline(&top, 2.0, color::DARKERBLUE);
         let drawable = mb.build(&mut systems.renderer, ctx);
         a.drawable = drawable;
         a.collision = actors::mk_polycol(&top);
@@ -482,7 +492,8 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
         //TUNNEL BOTTOM
         let mut a = actors::ActorType::Background.make();
         let mut mb = render::MeshBuilderOps::new();    
-        mb = mb.polygon(&bottom, color::BLACK);    
+        mb = mb.polygon(&bottom, color::BLACK);   
+        mb = mb.polyline(&bottom, 2.0, color::DARKERBLUE); 
         let drawable = mb.build(&mut systems.renderer, ctx);
         a.drawable = drawable;
         a.collision = actors::mk_polycol(&bottom);
@@ -523,74 +534,16 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
 
         
     }
-    
-    // CRYSTALS
-    
-    let mut rng = rand::thread_rng();    
-    let mut cells2 = cells.clone();
-    cells2.shuffle(& mut rng);    
-    {
-        let max_size = 10.0;
-        let min_size = 2.0;
-                
-        for c in cells2.iter().skip(1).take(cells2.len()-2){
-
-            let is_enemy = rng.gen::<bool>();
-            let color = if is_enemy{
-                color::BLACK
-            } else {
-                color::SKYBLUE
-            };
-
-            let dist    = rng.gen_range(min_size, max_size) as f32;
-            let c2 = c.get_shrinked(dist);
-
-            let p = cell::place_disc_in_cell(&c2, &mut rng);
-            let id = wb.add_antagonist(max_size);
-            wb.add_effect_to_actor(&id, effect::Effect::ResetActor{actor_id : id.clone()}, true);
-            let a = wb.get_mut_actor(&id).unwrap();
-
-            
-            let dist    = rng.gen_range(2.0, max_size) as f32;
-
-            let pts = mesh_gen::regular_polygon(dist, 5);
-
-            a.collision = actors::mk_polycol(&pts);      
-            a.drawable = systems.renderer.add_dynamic_poly(&pts, color);        
-            
-            let eff_on_col = if is_enemy{
-                level.get_transition_effect("lose".to_string(), 0.0)
-            } else {
-                effect::Effect::KillActor{actor_id:a.id.clone()}
-            };
-          
-            a.on_collision.push( eff_on_col );   
-            let sound_oidx = systems.get_sound("/Randomize6.wav");
-            if let Some(sound_idx) = sound_oidx{
-                a.on_collision.push( effect::Effect::PlaySound(*sound_idx));
-            }
-            
-            a.transform = p;            
-        }
-    }
-
-    // END TRIGGER
-
-    let mut a = actors::ActorType::Foreground.make();
-    let c = cells.iter().nth(cells.len()-2).unwrap();
-    a.collision = actors::mk_polycol(&c.get_points());
-    a.on_collision.push(level.get_transition_effect("win".to_string(), 0.0));            
-    wb.add_to_world(a);
-    
 
     // PLAYER
+    let player_size = 5.0f32;
     {
         let c = &cells[1];        
         let player_start = c.get_center();        
         // let player_actor_id = wb.add_player();
 
         let mut a = actors::ActorType::Player.make();
-        let pts = mesh_gen::base_ship(5.0);
+        let pts = mesh_gen::base_ship( player_size);
         a.collision = actors::mk_polycol(&pts);      
         a.drawable = systems.renderer.add_dynamic_poly(&pts, color::GREY);
         let player_actor_id = wb.add_to_world(a);
@@ -598,17 +551,130 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
 
 
 
-        let eff = effect::Effect::MoveActor{actor_id:player_actor_id, vector:Position{x :1.0, y:0.0}};
+        let eff = effect::Effect::MoveActor{actor_id:player_actor_id, vector:Position{x :2.0, y:0.0}};
         wb.add_effect_to_actor(&player_actor_id, eff, false);
         wb.add_effect_to_actor(&player_actor_id, effect::Effect::ProcessInput, false);
         let eff = effect::Effect::PlaceActor{actor_id:player_actor_id, position: player_start};
         wb.add_effect_to_actor(&player_actor_id, eff, true);
     }
+    
+    // CRYSTALS
+    
+    let mut rng = rand::thread_rng();    
+    let mut cells2 = cells.clone();
+    cells2.shuffle(& mut rng);    
+    {
+        let max_size = 30.0;
+        let min_size = 5.0;
+                
+        for c in cells2.iter().skip(1).take(cells2.len()-2){
+
+            let is_enemy = rng.gen::<bool>();
+            let dist    = rng.gen_range(min_size, max_size) as f32;
+
+            
+            let mut p : Option<Position> = None;
+            if is_enemy{
+                let cs = c.split(4);
+                // for c in cs.iter(){
+                //     let pts = c.get_shrinked(2.0f32).get_points().clone();
+                //     let mut a = wb.line_actor(&pts, color::random_foreground_color(), systems, ctx);
+                //     a.visible = true;
+                //     a.ticking = false;
+                //     wb.add_to_world(a);
+                // }
+                
+                let c2 : &cell::Cell = cs.choose(&mut rng).unwrap();
+                {
+                    // let pts = c2.get_shrinked(2.0f32).get_points().clone();
+                    // let mut a = wb.line_actor(&pts, color::random_foreground_color(), systems, ctx);
+                    // a.visible = true;
+                    // a.ticking = false;
+                    // wb.add_to_world(a);
+
+                    let cc2 = c2.get_shrinked(dist);
+
+                    // {
+                    //     let pts = cc2.get_points().clone();
+                    //     let mut a = wb.line_actor(&pts, color::random_foreground_color(), systems, ctx);
+                    //     a.visible = true;
+                    //     a.ticking = false;
+                    //     wb.add_to_world(a);
+                    // }
+                    
+                    if cc2.is_valid(){
+
+                        // let pts = cc2.get_shrinked(-10.0).get_points().clone();
+                        // let mut a = wb.line_actor(&pts, color::random_foreground_color(), systems, ctx);
+                        // a.visible = true;
+                        // a.ticking = false;
+                        // wb.add_to_world(a);
+
+                        // p = c2.get_point(0.5, 0.5);
+                        // p = Some(c2.get_point(0.5, 0.5));
+                        // p = Some(c2.get_point(0.0, 0.0));
+                        p = Some( cell::place_disc_in_cell(&cc2, &mut rng) );
+                    }
+                }
+            } else {
+                let c2 = c.get_shrinked(dist);                
+                p =Some( cell::place_disc_in_cell(&c2, &mut rng) );
+            }
+            
+            // let is_enemy = false;
+            let color = if is_enemy{
+                color::BLACK
+            } else {
+                color::SKYBLUE
+            };
+
+            if let Some(pos) = p {
+                
+                let id = wb.add_antagonist(max_size);
+                wb.add_effect_to_actor(&id, effect::Effect::ResetActor{actor_id : id.clone()}, true);
+                let a = wb.get_mut_actor(&id).unwrap();
+    
+                
+                let dist    = rng.gen_range(2.0, max_size) as f32;
+    
+                let pts = mesh_gen::regular_polygon(dist, 5);
+    
+                a.collision = actors::mk_polycol(&pts);      
+                a.drawable = systems.renderer.add_dynamic_poly(&pts, color);        
+                
+                let eff_on_col = if is_enemy{
+                    level.get_transition_effect("lose".to_string(), 0.0)
+                } else {
+                    effect::Effect::KillActor{actor_id:a.id.clone()}
+                };
+              
+                a.on_collision.push( eff_on_col );   
+                let sound_oidx = systems.get_sound("/Randomize6.wav");
+                if let Some(sound_idx) = sound_oidx{
+                    a.on_collision.push( effect::Effect::PlaySound(*sound_idx));
+                }
+                
+                a.transform = pos;            
+            }
+            }
+
+    }
+
+    // END TRIGGER
+
+    let mut a = actors::ActorType::Foreground.make();
+    let c = cells.iter().nth(cells.len()-1).unwrap();
+    a.collision = actors::mk_polycol(&c.get_points());
+    a.on_collision.push(level.get_transition_effect("win".to_string(), 0.0));            
+    wb.add_to_world(a);
+    
+
+
 
     // CAMERA
     let camera_start = Position{ x:0 as f32, y:0 as f32};
     let camera_id = wb.add_camera();
-    let eff = effect::Effect::MoveActor{actor_id:camera_id, vector:Position{x :-1.0, y:0.0}};
+    let eff = effect::Effect::MoveActor{actor_id:camera_id, vector:Position{x :-2.0, y:0.0}};
     wb.add_effect_to_actor(&camera_id, eff, false);
     let eff = effect::Effect::PlaceActor{actor_id:camera_id, position: camera_start};
     wb.add_effect_to_actor(&camera_id, eff, true);

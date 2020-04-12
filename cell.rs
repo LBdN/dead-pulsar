@@ -42,11 +42,19 @@ pub fn create_cells(top_pts : &Vec<Position>, bot_pts : &Vec<Position>) -> Vec::
     let mut last_top : Option<Position> = None;
     let mut last_bot : Option<Position> = None;
     for (top, bottom) in top_pts.iter().zip(bot_pts.iter()) {
+
+        if let (Some(last_t), Some(last_b)) = (last_top, last_bot){
+            if top.x == last_t.x {
+                continue;
+            }
+        } 
+
         if let None = last_top {
             last_top = Some(top.clone());
             last_bot = Some(bottom.clone());
             continue;
         }
+        
         result.push(Cell{
             x00 : last_bot.unwrap(),
             x01 : last_top.unwrap(),
@@ -112,6 +120,49 @@ impl Cell {
             x11 : x11.into(),
         }
     }
+
+    pub fn split(&self, number: i32) -> Vec::<Cell> {
+        let mut result = Vec::<Cell>::new();
+
+        let mut positions = Vec::<Position>::new();
+        for i in 0..=number{
+            let y = i as f32 / number as f32;
+            for j in 0..=number{
+                let x = j as f32 / number as f32;
+                let p = self.get_point(x, y);
+                positions.push(p);
+            }
+        }
+
+        let col_number = number + 1;
+        for i in 0..number*number{
+            let col = i % number;
+            let row = i / number;
+            let bottom_left : usize = (row*col_number + col) as usize;
+            let top_left : usize    = ((row+1)*col_number + col) as usize;
+            let c = Cell{
+                x00 : positions[bottom_left].clone(),
+                x01 : positions[top_left].clone(),
+                x10 : positions[bottom_left+1].clone(),
+                x11 : positions[top_left+1].clone(),
+            };
+            result.push(c);
+        }
+        result
+    }
+
+    pub fn is_valid(&self) -> bool{
+        // TODO : change the coordinate system
+        // which is 0,0 at topleft and y grow down. 
+        // the sign on y is strange because of it.
+        let a = self.x10.x > self.x00.x;
+        let b = self.x01.y < self.x00.y;
+        let c = self.x11.x > self.x01.x;
+        let d = self.x11.y < self.x10.y;
+        return a && b && c && d;
+    }
+
+
 }
 
 fn on_bisector_at(p: &Position, vy : &Vector2, vx: &Vector2, dist: f32) -> Point2{    

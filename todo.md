@@ -22,21 +22,28 @@
 - ship design
 
 ## v0.0.5 <---
-- progression control
-- layout ( ui )
+- progression control : speed and size of tunnel
 - minimal animation on crystals
+- better sound.
 
 ## v0.0.6
 - main menu
+- layout ( ui )
+- music
+- end cell with god ray ( hint of surface )
+
+## v0.0.7
 - highscore
 - end game
+- better backgrounds
 
+## v0.0.8
+- itch.io
 
 ## later
 - animation
 - enemies
-- musics
 - projectile ?
-- better backgrounds
-- itch.io
+
+
 

@@ -319,13 +319,15 @@ impl WorldBuilder{
         res 
     }
 
-    fn line_actor(&self, pts : &Vec::<Position>, color : color::Color, systems: &mut Systems, ctx: &mut Context) -> actors::Actor{
+    pub fn line_actor(&mut self, pts : &Vec::<Position>, color : color::Color, systems: &mut Systems, ctx: &mut Context) -> Id{
         let mut a = actors::ActorType::Background.make();
         let mut mb = render::MeshBuilderOps::new();    
         mb = mb.polyline(&pts, 1.0f32, color);            
         let drawable = mb.build(&mut systems.renderer, ctx);
-        a.drawable = drawable;
-        a
+        a.drawable = drawable;        
+        a.visible = true;
+        a.ticking = false;
+        self.add_to_world(a)
     }
 
     fn build(self) -> World{
@@ -450,17 +452,27 @@ pub fn victoryload(level : &Level, state: &mut GameState, _systems: &mut Systems
 pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
     wb.set_size(Size{x:((state.level+1) as f32)*1000.0, y:720.0});
-     
-    let decrease_ratio = 0.65f32;
-    let min_height = (50.0 * 3.0 * decrease_ratio.powi(state.level)).max(50.0);
-    // let min_height = 50.0;
+
+
+    // PLAYER part 1
+    let player_size = 5.0f32;
+    let pts = mesh_gen::base_ship( player_size);
+    let player_radius = Bounds2D::from_positions(&pts).get_radius();
     
 
+     
     
-    
+    let absolute_min  = player_radius * 3.0;
+    let decrease_ratio = 0.65f32;
+    let min_height = (50.0 * 3.0 * decrease_ratio.powi(state.level)).max(absolute_min);
+
+    let decrease_ratio = 0.75f32;
+    let max_height = (wb.w.size.y * decrease_ratio.powi(state.level)).max(absolute_min);    
+
+    let height_bounds = Bounds1D{min: min_height, max: max_height};
 
     let section_length = Bounds1D{min:min_height, max:min_height*2.0};
-    let (mut top, mut bottom) = terrain::build_tunnel2(&wb.w.size, &section_length, min_height);
+    let (mut top, mut bottom) = terrain::build_tunnel2(&wb.w.size, &section_length, &height_bounds);
     terrain::invert_pos(&wb.w.size, &mut top, false);
     terrain::invert_pos(&wb.w.size, &mut bottom, false);
     let cells = cell::create_cells(&top, &bottom);
@@ -535,21 +547,16 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
         
     }
 
-    // PLAYER
-    let player_size = 5.0f32;
+    // PLAYER part 2
     {
-        let c = &cells[1];        
-        let player_start = c.get_center();        
-        // let player_actor_id = wb.add_player();
+        let c = &cells[0];        
+        let player_start = c.get_center();                
 
-        let mut a = actors::ActorType::Player.make();
-        let pts = mesh_gen::base_ship( player_size);
+        let mut a = actors::ActorType::Player.make();        
         a.collision = actors::mk_polycol(&pts);      
         a.drawable = systems.renderer.add_dynamic_poly(&pts, color::GREY);
         let player_actor_id = wb.add_to_world(a);
         wb.w.player_atr_id = player_actor_id.clone();
-
-
 
         let eff = effect::Effect::MoveActor{actor_id:player_actor_id, vector:Position{x :2.0, y:0.0}};
         wb.add_effect_to_actor(&player_actor_id, eff, false);
@@ -557,62 +564,51 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
         let eff = effect::Effect::PlaceActor{actor_id:player_actor_id, position: player_start};
         wb.add_effect_to_actor(&player_actor_id, eff, true);
     }
+
     
     // CRYSTALS
+
+    
     
     let mut rng = rand::thread_rng();    
     let mut cells2 = cells.clone();
     cells2.shuffle(& mut rng);    
     {
-        let max_size = 30.0;
+        let max_size = 17.0;
         let min_size = 5.0;
                 
         for c in cells2.iter().skip(1).take(cells2.len()-2){
-
-            let is_enemy = rng.gen::<bool>();
-            let dist    = rng.gen_range(min_size, max_size) as f32;
-
             
+            let dist    = rng.gen_range(min_size, max_size) as f32;
+            
+            let cs = c.split(3 );
             let mut p : Option<Position> = None;
-            if is_enemy{
-                let cs = c.split(4);
+            let can_be_enemy= {                
+                let mut all_valid = true;
+                for c in cs.iter(){
+                    let valid = c.get_shrinked_y(player_radius).is_valid();
+                    if !valid {
+                        let pts = c.get_shrinked_y(player_radius).get_points().clone();
+                        wb.line_actor(&pts, color::RED, systems, ctx);                    
+                        all_valid = false;
+                        break;
+                    }
+                }
+
+                all_valid
+            };
+
+            let is_enemy = can_be_enemy && rng.gen::<bool>();
+            if is_enemy {
                 // for c in cs.iter(){
                 //     let pts = c.get_shrinked(2.0f32).get_points().clone();
-                //     let mut a = wb.line_actor(&pts, color::random_foreground_color(), systems, ctx);
-                //     a.visible = true;
-                //     a.ticking = false;
-                //     wb.add_to_world(a);
+                //     wb.line_actor(&pts, color::random_foreground_color(), systems, ctx);                    
                 // }
                 
                 let c2 : &cell::Cell = cs.choose(&mut rng).unwrap();
-                {
-                    // let pts = c2.get_shrinked(2.0f32).get_points().clone();
-                    // let mut a = wb.line_actor(&pts, color::random_foreground_color(), systems, ctx);
-                    // a.visible = true;
-                    // a.ticking = false;
-                    // wb.add_to_world(a);
-
-                    let cc2 = c2.get_shrinked(dist);
-
-                    // {
-                    //     let pts = cc2.get_points().clone();
-                    //     let mut a = wb.line_actor(&pts, color::random_foreground_color(), systems, ctx);
-                    //     a.visible = true;
-                    //     a.ticking = false;
-                    //     wb.add_to_world(a);
-                    // }
-                    
-                    if cc2.is_valid(){
-
-                        // let pts = cc2.get_shrinked(-10.0).get_points().clone();
-                        // let mut a = wb.line_actor(&pts, color::random_foreground_color(), systems, ctx);
-                        // a.visible = true;
-                        // a.ticking = false;
-                        // wb.add_to_world(a);
-
-                        // p = c2.get_point(0.5, 0.5);
-                        // p = Some(c2.get_point(0.5, 0.5));
-                        // p = Some(c2.get_point(0.0, 0.0));
+                {                    
+                    let cc2 = c2.get_shrinked(dist);                    
+                    if cc2.is_valid(){                        
                         p = Some( cell::place_disc_in_cell(&cc2, &mut rng) );
                     }
                 }

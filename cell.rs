@@ -121,6 +121,21 @@ impl Cell {
         }
     }
 
+    pub fn get_shrinked_y(&self, dist: f32) -> Cell{
+        let [vy, vx1, vx2] = self.get_vectors();
+        let vy2 = Point2::from(self.x11) - Point2::from(self.x10);
+        let x00 = Point2::from(self.x00) + vy.normalize() * -dist;
+        let x01 = Point2::from(self.x01) + vy.normalize() * dist;
+        let x10 = Point2::from(self.x10) + vy2.normalize() * -dist;
+        let x11 = Point2::from(self.x10) + vy2.normalize() * dist;
+        Cell{
+            x00 : x00.into(),
+            x01 : x01.into(),
+            x10 : x10.into(),
+            x11 : x11.into(),
+        }
+    }
+
     pub fn split(&self, number: i32) -> Vec::<Cell> {
         let mut result = Vec::<Cell>::new();
 

@@ -50,7 +50,12 @@ impl Renderer{
     }
 
     pub fn push_cam_transform(&mut self, ctx: &mut Context){
-        let cam_transform = DrawParam::default().dest(self.cam_tr).to_matrix();
+        let wh = graphics::screen_coordinates(ctx).h;
+        let cam_transform = DrawParam::default()
+                                .dest(self.cam_tr)
+                                .scale(Vector2::new(1.0, -1.0))
+                                .offset(Point2::new(0.0, 360.0))
+                                .to_matrix();                
         graphics::push_transform(ctx, Some(cam_transform));
         graphics::apply_transformations(ctx).unwrap();
     }

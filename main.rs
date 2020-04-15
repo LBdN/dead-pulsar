@@ -130,9 +130,9 @@ impl App {
 
 fn player_handle_input(input : &InputState, pa : &mut actors::Actor, worldbounds : &level::WorldBounds, dt :u128) {
 
-    const MOVE_STEP : f32 = -180.5;    
+    const MOVE_STEP : f32 = 180.5;    
     
-    let movex = input.xaxis * -MOVE_STEP * dt as f32 / 1000.0;
+    let movex = input.xaxis * MOVE_STEP * dt as f32 / 1000.0;
     let movey = input.yaxis * MOVE_STEP  * dt as f32 / 1000.0;
         
     pa.transform.x += movex;

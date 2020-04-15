@@ -32,6 +32,12 @@ pub struct Bounds1D{
     pub max: f32
 }
 
+impl Bounds1D{
+    pub fn get_size(&self) -> f32 {
+        self.max - self.min
+    } 
+}
+
 pub struct Bounds2D{
     pub min: Position,
     pub max: Position

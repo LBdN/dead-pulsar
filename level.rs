@@ -451,7 +451,10 @@ pub fn victoryload(level : &Level, state: &mut GameState, _systems: &mut Systems
 
 pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
-    wb.set_size(Size{x:((state.level+1) as f32)*1000.0, y:720.0});
+
+    let state_level = state.level+3;
+
+    wb.set_size(Size{x:((state_level+3) as f32)*1000.0, y:720.0});
 
 
     // PLAYER part 1
@@ -464,10 +467,10 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
     
     let absolute_min  = player_radius * 3.0;
     let decrease_ratio = 0.65f32;
-    let min_height = (50.0 * 3.0 * decrease_ratio.powi(state.level)).max(absolute_min);
+    let min_height = (50.0 * 3.0 * decrease_ratio.powi(state_level)).max(absolute_min);
 
     let decrease_ratio = 0.75f32;
-    let max_height = (wb.w.size.y * decrease_ratio.powi(state.level)).max(absolute_min);    
+    let max_height = (wb.w.size.y * decrease_ratio.powi(state_level)).max(absolute_min);    
 
     let height_bounds = Bounds1D{min: min_height, max: max_height};
 
@@ -581,29 +584,24 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
             
             let dist    = rng.gen_range(min_size, max_size) as f32;
             
-            let cs = c.split(3 );
+            let cs = c.split(3);
             let mut p : Option<Position> = None;
             let can_be_enemy= {                
-                let mut all_valid = true;
+                let mut nb_invalid = 0;
                 for c in cs.iter(){
-                    let valid = c.get_shrinked_y(player_radius).is_valid();
+                    let valid = c.get_shrinked(player_radius).is_valid();
                     if !valid {
-                        let pts = c.get_shrinked_y(player_radius).get_points().clone();
-                        wb.line_actor(&pts, color::RED, systems, ctx);                    
-                        all_valid = false;
-                        break;
+                        // let pts = c.get_shrinked(player_radius).get_points().clone();
+                        // wb.line_actor(&pts, color::RED, systems, ctx);                    
+                        nb_invalid += 1;                        
                     }
                 }
 
-                all_valid
+                nb_invalid > 2
             };
 
             let is_enemy = can_be_enemy && rng.gen::<bool>();
-            if is_enemy {
-                // for c in cs.iter(){
-                //     let pts = c.get_shrinked(2.0f32).get_points().clone();
-                //     wb.line_actor(&pts, color::random_foreground_color(), systems, ctx);                    
-                // }
+            if is_enemy {                
                 
                 let c2 : &cell::Cell = cs.choose(&mut rng).unwrap();
                 {                    
@@ -631,9 +629,11 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
                 let a = wb.get_mut_actor(&id).unwrap();
     
                 
-                let dist    = rng.gen_range(2.0, max_size) as f32;
+                // let dist    = rng.gen_range(2.0, max_size) as f32;
     
-                let pts = mesh_gen::regular_polygon(dist, 5);
+                
+                let pts = if is_enemy {mesh_gen::irregular_polygon(Bounds1D{min:dist, max: 1.3*dist}, 7, &mut rng)} 
+                          else {mesh_gen::crystal_polygon(Bounds1D{min:dist/2.0, max: 2.5*dist} ,8, &mut rng)} ;
     
                 a.collision = actors::mk_polycol(&pts);      
                 a.drawable = systems.renderer.add_dynamic_poly(&pts, color);        
@@ -652,8 +652,7 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
                 
                 a.transform = pos;            
             }
-            }
-
+        }
     }
 
     // END TRIGGER

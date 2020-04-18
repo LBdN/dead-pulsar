@@ -243,54 +243,73 @@ fn get_tunnel_height(world_range : HeightRange, segment_range: HeightRange, min_
     result
 }
 
-pub fn build_tunnel2(world_size : &Size, length_bounds : &Bounds1D, height_bounds: &Bounds1D) -> (Vec::<Position>, Vec::<Position>){    
+
+fn get_section_length(posx :f32, maxx: f32, length_bounds : &Bounds1D, rng :&mut ThreadRng) -> f32{    
+    let available_space    =  maxx - posx;
+    if available_space < length_bounds.min{
+        available_space
+    } else{
+        rng.gen_range(length_bounds.min, (available_space).min(length_bounds.max))
+    }            
+}
+
+pub fn build_tunnel2(world_size : &Size, length_bounds : &Bounds1D, height_bounds: &Bounds1D, first_length: f32) -> (Vec::<Position>, Vec::<Position>){    
         
-    let mut top_pts = Vec::<Position>::new();    
-    let mut bot_pts = Vec::<Position>::new();
-    top_pts.push(Position{ x:0.0, y: world_size.y});
-    bot_pts.push(Position{ x:0.0, y: 0.0});
+    
+    let mut height_ranges = Vec::<HeightRange>::new();
+    let mut xpositions = Vec::<f32>::new();
+    let mut pos_x = 0.0;
+    let mut rng = rand::thread_rng();  
+
+    let world_top    = world_size.y;
+    let world_bottom = 0.0f32;
+    let world_range = HeightRange{top: world_top, bottom: world_bottom};
 
     let tunnel_height = height_bounds.min*2.0;
     let tunnel_bottom = world_size.y/3.0;
+    let section_length = 0.0f32;
     let start_segment = HeightRange{top: tunnel_bottom+tunnel_height, bottom:tunnel_bottom};
-    top_pts.push(Position{ x:0.0, y: start_segment.top});
-    bot_pts.push(Position{ x:0.0, y: start_segment.bottom});   
+    pos_x += section_length;
+    height_ranges.push(start_segment);
+    xpositions.push(pos_x);
 
-    let world_top = world_size.y;
-    let world_bottom = 0.0f32;
-    let world_range = HeightRange{top: world_top, bottom: world_bottom};
+    let real_first_length =first_length.min( world_size.x - pos_x );    
+    pos_x += real_first_length;
+    height_ranges.push(start_segment);
+    xpositions.push(pos_x);
     
-    let mut rng = rand::thread_rng();  
-    let mut length = 0.0;
-
-    let mut first = true;
     let mut current_range = start_segment;
-    while length < world_size.x{
-
-        let mut segment_length = 0.0;
-        if world_size.x - length < length_bounds.min{
-            segment_length = world_size.x - length;
-        } else{
-            segment_length = rng.gen_range(length_bounds.min, ( world_size.x - length).min(length_bounds.max));
-        }        
+    height_ranges.push(current_range);
+    xpositions.push(pos_x);
+    
+    while pos_x < world_size.x{
+        
+        let segment_length = get_section_length(pos_x, world_size.x, &length_bounds, &mut rng );
         if segment_length == 0.0f32{
             break;
         }
-
-        length += segment_length;
-        if first {
-            first = !first;
-        } else {        
-            // let cos_a = min_height / current_range.size() ;
-            // let max_vert_move = cos_a.acos().tan() * segment_length;
-            current_range = get_tunnel_height2(world_range, current_range, height_bounds, segment_length, &mut rng);
-        } 
-        assert!(!length.is_nan());
-        assert!(!current_range.top.is_nan());
-        top_pts.push(Position{ x:length, y: current_range.top});
-        bot_pts.push(Position{ x:length, y: current_range.bottom});
+        pos_x += segment_length;                   
+        current_range = get_tunnel_height2(&world_range, &current_range, height_bounds, segment_length, &mut rng);
+        height_ranges.push(current_range);
+        xpositions.push(pos_x);
+         
+        assert!(!pos_x.is_nan());
+        assert!(!current_range.top.is_nan());        
     }
-        
+
+
+    let mut top_pts = Vec::<Position>::new();    
+    let mut bot_pts = Vec::<Position>::new();
+    let mut first = true;
+    for (height_range, length) in height_ranges.iter().zip(xpositions.iter()){
+        if first {
+            top_pts.push(Position{ x:0.0, y: world_size.y});
+            bot_pts.push(Position{ x:0.0, y: 0.0});
+            first = false;            
+        }
+        top_pts.push(Position{ x:*length, y: height_range.top});
+        bot_pts.push(Position{ x:*length, y: height_range.bottom});
+    }        
     top_pts.push(Position{ x:world_size.x, y: world_size.y});
     bot_pts.push(Position{ x:world_size.x, y: 0.0});
 
@@ -357,7 +376,7 @@ fn get_tangent_vector(o : Point2, p : Point2, radius : f32, up: bool) -> Vector2
     p2_p1
 } 
 
-fn get_tunnel_height2(world_range : HeightRange, segment_range: HeightRange, height_bounds: &Bounds1D, distance: f32, rng :&mut ThreadRng) -> HeightRange{
+fn get_tunnel_height2(world_range : &HeightRange, segment_range: &HeightRange, height_bounds: &Bounds1D, distance: f32, rng :&mut ThreadRng) -> HeightRange{
     
     let radius = height_bounds.min;
 

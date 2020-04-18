@@ -462,7 +462,7 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
     let pts = mesh_gen::base_ship( player_size);
     let player_radius = Bounds2D::from_positions(&pts).get_radius();
     
-
+    let first_section_length = player_radius * 15.0;
      
     
     let absolute_min  = player_radius * 3.0;
@@ -475,7 +475,7 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
     let height_bounds = Bounds1D{min: min_height, max: max_height};
 
     let section_length = Bounds1D{min:min_height, max:min_height*2.0};
-    let (mut top, mut bottom) = terrain::build_tunnel2(&wb.w.size, &section_length, &height_bounds);
+    let (mut top, mut bottom) = terrain::build_tunnel2(&wb.w.size, &section_length, &height_bounds, first_section_length);
     terrain::invert_pos(&wb.w.size, &mut top, false);
     terrain::invert_pos(&wb.w.size, &mut bottom, false);
     let cells = cell::create_cells(&top, &bottom);

@@ -101,8 +101,5 @@ pub fn base_ship(dist: f32) -> Vec::<Position> {
     result
 }
 
-pub fn star(min_dist: f32, max_dist: f32, nb_side: i32 ) -> Vec::<Position>{
-    let pts = regular_polygon(max_dist, nb_side);
-    pts
-}
+
 

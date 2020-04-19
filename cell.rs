@@ -31,10 +31,10 @@ fn minimum_distance(v : Point2, w : Point2, p : Point2) -> f32 {
 
   #[derive(Copy, Clone)]
  pub struct Cell{
-    x00 : Position,
-    x01 : Position,
-    x10 : Position,
-    x11 : Position,
+    pub x00 : Position,
+    pub x01 : Position,
+    pub x10 : Position,
+    pub x11 : Position,
 }
 
 pub fn create_cells(top_pts : &Vec<Position>, bot_pts : &Vec<Position>) -> Vec::<Cell> {
@@ -43,24 +43,23 @@ pub fn create_cells(top_pts : &Vec<Position>, bot_pts : &Vec<Position>) -> Vec::
     let mut last_bot : Option<Position> = None;
     for (top, bottom) in top_pts.iter().zip(bot_pts.iter()) {
 
-        if let (Some(last_t), Some(last_b)) = (last_top, last_bot){
-            if top.x == last_t.x {
-                continue;
-            }
-        } 
-
         if let None = last_top {
             last_top = Some(top.clone());
             last_bot = Some(bottom.clone());
             continue;
         }
-        
-        result.push(Cell{
+
+        let c = Cell{
             x00 : last_bot.unwrap(),
             x01 : last_top.unwrap(),
             x10 : bottom.clone(),
             x11 : top.clone(),
-        });
+        };
+
+        panic!(c.is_valid());
+        
+        result.push(c);
+        
         last_top = Some(top.clone());
         last_bot = Some(bottom.clone());
 
@@ -171,13 +170,17 @@ impl Cell {
         // which is 0,0 at topleft and y grow down. 
         // the sign on y is strange because of it.
         let a = self.x10.x > self.x00.x;
-        let b = self.x01.y < self.x00.y;
+        let b = self.x01.y > self.x00.y;
         let c = self.x11.x > self.x01.x;
-        let d = self.x11.y < self.x10.y;
+        let d = self.x11.y > self.x10.y;
         return a && b && c && d;
     }
 
-
+    pub fn place_at_bottom(&self, rng :&mut ThreadRng) -> Position  {
+        let x = rng.gen_range(0.0, 1.0);
+        let y = 0.0;        
+        self.get_point(x, y)    
+      }
 }
 
 fn on_bisector_at(p: &Position, vy : &Vector2, vx: &Vector2, dist: f32) -> Point2{    

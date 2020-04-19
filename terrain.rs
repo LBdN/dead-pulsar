@@ -4,7 +4,9 @@ use rand::seq::SliceRandom;
 // use rand::seq::IteratorRandom;
 use std::ops::RangeInclusive;
 use crate::unit::*;
+use crate::cell::Cell;
 use std::f32::consts::{PI, FRAC_PI_2};
+
 
 
 #[derive(Debug, Copy, Clone)]
@@ -119,7 +121,7 @@ const CHANGE_ALLOCS : [ChangeAlloc;3] = [ChangeAlloc::Top, ChangeAlloc::Bottom, 
 
 
 #[derive(Copy, Clone)]
-struct HeightRange{
+pub struct HeightRange{
     bottom: f32,
     top: f32
 }
@@ -253,7 +255,7 @@ fn get_section_length(posx :f32, maxx: f32, length_bounds : &Bounds1D, rng :&mut
     }            
 }
 
-pub fn build_tunnel2(world_size : &Size, length_bounds : &Bounds1D, height_bounds: &Bounds1D, first_length: f32) -> (Vec::<Position>, Vec::<Position>){    
+pub fn build_tunnel2(world_size : &Size, length_bounds : &Bounds1D, height_bounds: &Bounds1D, first_length: f32) -> (Vec::<HeightRange>, Vec::<f32>){    
         
     
     let mut height_ranges = Vec::<HeightRange>::new();
@@ -278,10 +280,7 @@ pub fn build_tunnel2(world_size : &Size, length_bounds : &Bounds1D, height_bound
     height_ranges.push(start_segment);
     xpositions.push(pos_x);
     
-    let mut current_range = start_segment;
-    height_ranges.push(current_range);
-    xpositions.push(pos_x);
-    
+    let mut current_range = start_segment;    
     while pos_x < world_size.x{
         
         let segment_length = get_section_length(pos_x, world_size.x, &length_bounds, &mut rng );
@@ -297,12 +296,18 @@ pub fn build_tunnel2(world_size : &Size, length_bounds : &Bounds1D, height_bound
         assert!(!current_range.top.is_nan());        
     }
 
+    // convert_to_polygons(&height_ranges, &xpositions, world_size)
+    (height_ranges, xpositions)
+}
 
+
+pub fn convert_to_polygons(height_ranges: &Vec::<HeightRange>, xpositions: &Vec<f32>, world_size : &Size) -> (Vec::<Position>, Vec::<Position>){
     let mut top_pts = Vec::<Position>::new();    
     let mut bot_pts = Vec::<Position>::new();
     let mut first = true;
     for (height_range, length) in height_ranges.iter().zip(xpositions.iter()){
         if first {
+            // needed to have a closed correct poly.
             top_pts.push(Position{ x:0.0, y: world_size.y});
             bot_pts.push(Position{ x:0.0, y: 0.0});
             first = false;            
@@ -310,10 +315,32 @@ pub fn build_tunnel2(world_size : &Size, length_bounds : &Bounds1D, height_bound
         top_pts.push(Position{ x:*length, y: height_range.top});
         bot_pts.push(Position{ x:*length, y: height_range.bottom});
     }        
+    // needed to have a closed correct poly.
     top_pts.push(Position{ x:world_size.x, y: world_size.y});
     bot_pts.push(Position{ x:world_size.x, y: 0.0});
 
     (top_pts, bot_pts)
+}
+
+pub fn convert_to_cells(height_ranges: &Vec::<HeightRange>, xpositions: &Vec<f32>) -> Vec::<Cell> {
+    let mut result = Vec::<Cell>::new();
+    let height_ranges_pairs = height_ranges.windows(2);
+    let xpositions_pairs = xpositions.windows(2);
+    for item in height_ranges_pairs.zip(xpositions_pairs){
+        if let &[last_hr, cur_hr] = item.0 {
+            if let &[last_x, cur_x] = item.1 {                
+                let c = Cell{
+                    x00 : Position{x: last_x, y: last_hr.bottom},
+                    x01 : Position{x: last_x, y: last_hr.top},
+                    x10 : Position{x: cur_x, y: cur_hr.bottom},
+                    x11 : Position{x: cur_x, y: cur_hr.top}
+                };
+                // panic!(c.is_valid());
+                result.push(c);
+            }
+        }
+    }
+    result
 }
 
 

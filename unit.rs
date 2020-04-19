@@ -64,8 +64,8 @@ impl Bounds2D{
         for p in pts{
             max_x = p.x.max(max_x);
             min_x = p.x.min(min_x);
-            max_y = p.x.max(max_x);
-            min_y = p.x.min(min_y);
+            max_y = p.y.max(max_y);
+            min_y = p.y.min(min_y);
         }
         Bounds2D {
             min : Position { x : min_x, y : min_y},

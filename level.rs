@@ -319,12 +319,10 @@ impl WorldBuilder{
         res 
     }
 
-    pub fn line_actor(&mut self, pts : &Vec::<Position>, color : color::Color, systems: &mut Systems, ctx: &mut Context) -> Id{
-        let mut a = actors::ActorType::Background.make();
-        let mut mb = render::MeshBuilderOps::new();    
-        mb = mb.polyline(&pts, 1.0f32, color);            
-        let drawable = mb.build(&mut systems.renderer, ctx);
-        a.drawable = drawable;        
+    pub fn add_debug_actor(&mut self,  mb : render::MeshBuilderOps, systems: &mut Systems, ctx: &mut Context) -> Id{
+        let mut a = actors::ActorType::Background.make();        
+        let drawable = mb.build(&mut systems.renderer, ctx);            
+        a.drawable = drawable;
         a.visible = true;
         a.ticking = false;
         self.add_to_world(a)
@@ -453,6 +451,8 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
     let mut wb = WorldBuilder::new(level.name.clone());
 
     let state_level = state.level+3;
+    let mut debug_mb = render::MeshBuilderOps::new();    
+    
 
     wb.set_size(Size{x:((state_level+3) as f32)*1000.0, y:720.0});
 
@@ -475,10 +475,12 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
     let height_bounds = Bounds1D{min: min_height, max: max_height};
 
     let section_length = Bounds1D{min:min_height, max:min_height*2.0};
-    let (mut top, mut bottom) = terrain::build_tunnel2(&wb.w.size, &section_length, &height_bounds, first_section_length);
-    terrain::invert_pos(&wb.w.size, &mut top, false);
-    terrain::invert_pos(&wb.w.size, &mut bottom, false);
-    let cells = cell::create_cells(&top, &bottom);
+    let (mut height_ranges, xpositions) = terrain::build_tunnel2(&wb.w.size, &section_length, &height_bounds, first_section_length);
+    let (top, bottom) = terrain::convert_to_polygons(&height_ranges, &xpositions, &wb.w.size);
+    // terrain::invert_pos(&wb.w.size, &mut top, false);
+    // terrain::invert_pos(&wb.w.size, &mut bottom, false);
+    let cells = terrain::convert_to_cells(&height_ranges, &xpositions);
+    // let cells = cell::create_cells(&top, &bottom);
 
     // BACKGROUND.
     {
@@ -584,35 +586,39 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
             
             let dist    = rng.gen_range(min_size, max_size) as f32;
             
-            let cs = c.split(3);
-            let mut p : Option<Position> = None;
+            let cs = c.split(2);
+            
             let can_be_enemy= {                
                 let mut nb_invalid = 0;
                 for c in cs.iter(){
                     let valid = c.get_shrinked(player_radius).is_valid();
                     if !valid {
-                        // let pts = c.get_shrinked(player_radius).get_points().clone();
-                        // wb.line_actor(&pts, color::RED, systems, ctx);                    
+                        let pts = c.get_points().clone();
+                        debug_mb = debug_mb.polyline(&pts, 1.0f32, color::RED);                                    
                         nb_invalid += 1;                        
                     }
                 }
 
-                nb_invalid > 2
+                nb_invalid < 3
             };
 
+            let mut p : Option<Position> = None;
             let is_enemy = can_be_enemy && rng.gen::<bool>();
             if is_enemy {                
                 
                 let c2 : &cell::Cell = cs.choose(&mut rng).unwrap();
                 {                    
                     let cc2 = c2.get_shrinked(dist);                    
-                    if cc2.is_valid(){                        
+                    if cc2.is_valid(){      
+                        let pts = cc2.get_points().clone();
+                        debug_mb = debug_mb.polyline(&pts, 1.0f32, color::GREY);
                         p = Some( cell::place_disc_in_cell(&cc2, &mut rng) );
                     }
                 }
             } else {
                 let c2 = c.get_shrinked(dist);                
-                p =Some( cell::place_disc_in_cell(&c2, &mut rng) );
+                p = Some(c2.place_at_bottom(&mut rng));
+                // p =Some( cell::place_disc_in_cell(&c2, &mut rng) );
             }
             
             // let is_enemy = false;
@@ -704,5 +710,6 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
         wb.add_effect_to_actor(&text_id, effect::Effect::UpdateScore{actor_id:text_id}, false);
     }
 
+    // wb.add_debug_actor(debug_mb , systems, ctx);                    
     wb.build()
 }

@@ -6,7 +6,7 @@ use std::path;
 use std::collections::HashMap;
 
 use ggez::{Context, ContextBuilder, GameResult};
-use ggez::event::{self, EventHandler, Axis};
+use ggez::event::{self, EventHandler, Axis, Button};
 use ggez::input::gamepad::GamepadId;
 use ggez::input::keyboard::KeyCode;
 use ggez::event::KeyMods;
@@ -57,7 +57,8 @@ pub struct GameState{
     score     : i32,    
     input     : InputState,
     level     : i32,
-    screen : Size
+    screen    : Size,
+    paused    : bool
 }
 
 pub struct Systems{
@@ -106,7 +107,8 @@ impl App {
                 score : 0,
                 input : InputState:: default(),
                 level : 0,
-                screen : screen
+                screen : screen,
+                paused : false
             }),           
             levels : Vec::<level::Level>::new(),
             world : level::World::empty()
@@ -276,6 +278,12 @@ impl EventHandler for App {
                 p.input.yaxis = _value;                
             }
 
+        }
+    }
+
+    fn gamepad_button_up_event(&mut self, _ctx: &mut Context, _btn: Button, _id: GamepadId) {
+        if let Some(state) = self.state.as_mut(){            
+            state.paused = !state.paused
         }
     }
 

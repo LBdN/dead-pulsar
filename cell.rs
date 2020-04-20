@@ -1,10 +1,13 @@
-use nalgebra as na;
-use crate::unit::{Position};
+use std::f64::consts::{PI, FRAC_PI_2};
+
 use rand::Rng;
 use rand::rngs::ThreadRng;
+use nalgebra as nal;
+use nal::{Vector3, Rotation3};
 
-type Vector2 = na::Vector2::<f32>;
-type Point2  = na::Point2::<f32>;
+use crate::unit::*;
+
+
 
 fn get_point_in_cell(vx1: Vector2, vx2: Vector2, vy: Vector2, x :f32, y:f32) -> Position {
     let vx = vx1 + (vx2-vx1)*y;
@@ -102,6 +105,20 @@ impl Cell {
         p
     }
 
+    pub fn get_relative_point(&self, x :f32, y:f32) -> Position {
+        let [vy, vx1, vx2] = self.get_vectors();
+        let mut p = get_point_in_cell(vx1, vx2, vy, x, y);        
+        p
+    }
+
+    pub fn get_pos_and_normal(&self, x: f32, y: f32) -> (Position, Vector2) {
+        let p = self.get_point(x, y);
+        let p2 = self.get_point(1.0, y);
+        let v = Point2::from(p2) - Point2::from(p);
+        let v2 = Vector2::new(-v.y,  v.x);
+        (p, v2.normalize())
+    }
+
     pub fn get_shrinked(&self, dist: f32) -> Cell {
         let [vy, vx1, vx2] = self.get_vectors();
         let x00 = on_bisector_at(&self.x00, &vy, &vx1, dist);
@@ -123,14 +140,27 @@ impl Cell {
     pub fn get_shrinked_y(&self, dist: f32) -> Cell{
         let [vy, vx1, vx2] = self.get_vectors();
         let vy2 = Point2::from(self.x11) - Point2::from(self.x10);
-        let x00 = Point2::from(self.x00) + vy.normalize() * -dist;
-        let x01 = Point2::from(self.x01) + vy.normalize() * dist;
-        let x10 = Point2::from(self.x10) + vy2.normalize() * -dist;
-        let x11 = Point2::from(self.x10) + vy2.normalize() * dist;
+        let x00 = Point2::from(self.x00) + vy.normalize() * dist;
+        let x01 = Point2::from(self.x01) + vy.normalize() * -dist;
+        let x10 = Point2::from(self.x10) + vy2.normalize() * dist;
+        let x11 = Point2::from(self.x11) + vy2.normalize() * -dist;
         Cell{
             x00 : x00.into(),
             x01 : x01.into(),
             x10 : x10.into(),
+            x11 : x11.into(),
+        }
+    }
+
+    pub fn get_bottom_slice(&self, dist: f32) -> Cell{
+        let [vy, vx1, vx2] = self.get_vectors();
+        let vy2 = Point2::from(self.x11) - Point2::from(self.x10);
+        let x01 = Point2::from(self.x00) + vy.normalize() * dist;        
+        let x11 = Point2::from(self.x10) + vy2.normalize() * dist;        
+        Cell{
+            x00 : self.x00.into(),
+            x01 : x01.into(),
+            x10 : self.x10.into(),
             x11 : x11.into(),
         }
     }
@@ -165,6 +195,36 @@ impl Cell {
         result
     }
 
+    pub fn split_xy(&self, number_col: i32, number_row: i32) -> Vec::<Cell> {
+        let mut result = Vec::<Cell>::new();
+
+        let mut positions = Vec::<Position>::new();
+        for i in 0..=number_row{
+            let y = i as f32 / number_row as f32;
+            for j in 0..=number_col{
+                let x = j as f32 / number_col as f32;
+                let p = self.get_point(x, y);
+                positions.push(p);
+            }
+        }
+
+        let col_number = number_col + 1;
+        for i in 0..number_row*number_col{
+            let col = i % number_col;
+            let row = i / number_col;
+            let bottom_left : usize = (row*col_number + col) as usize;
+            let top_left : usize    = ((row+1)*col_number + col) as usize;
+            let c = Cell{
+                x00 : positions[bottom_left].clone(),
+                x01 : positions[top_left].clone(),
+                x10 : positions[bottom_left+1].clone(),
+                x11 : positions[top_left+1].clone(),
+            };
+            result.push(c);
+        }
+        result
+    }
+
     pub fn is_valid(&self) -> bool{
         // TODO : change the coordinate system
         // which is 0,0 at topleft and y grow down. 
@@ -181,6 +241,10 @@ impl Cell {
         let y = 0.0;        
         self.get_point(x, y)    
       }
+
+    pub fn can_contains(&self, radius : f32) -> bool{
+        self.get_shrinked(radius).is_valid()                    
+    }
 }
 
 fn on_bisector_at(p: &Position, vy : &Vector2, vx: &Vector2, dist: f32) -> Point2{    

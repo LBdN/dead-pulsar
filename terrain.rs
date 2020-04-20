@@ -246,7 +246,7 @@ fn get_tunnel_height(world_range : HeightRange, segment_range: HeightRange, min_
 }
 
 
-fn get_section_length(posx :f32, maxx: f32, length_bounds : &Bounds1D, rng :&mut ThreadRng) -> f32{    
+fn get_section_length(posx :f32, maxx: f32, length_bounds : &Bounds1D<f32>, rng :&mut ThreadRng) -> f32{    
     let available_space    =  maxx - posx;
     if available_space < length_bounds.min{
         available_space
@@ -255,7 +255,7 @@ fn get_section_length(posx :f32, maxx: f32, length_bounds : &Bounds1D, rng :&mut
     }            
 }
 
-pub fn build_tunnel2(world_size : &Size, length_bounds : &Bounds1D, height_bounds: &Bounds1D, first_length: f32) -> (Vec::<HeightRange>, Vec::<f32>){    
+pub fn build_tunnel2(world_size : &Size, length_bounds : &Bounds1D<f32>, height_bounds: &Bounds1D<f32>, first_length: f32) -> (Vec::<HeightRange>, Vec::<f32>){    
         
     
     let mut height_ranges = Vec::<HeightRange>::new();
@@ -403,7 +403,7 @@ fn get_tangent_vector(o : Point2, p : Point2, radius : f32, up: bool) -> Vector2
     p2_p1
 } 
 
-fn get_tunnel_height2(world_range : &HeightRange, segment_range: &HeightRange, height_bounds: &Bounds1D, distance: f32, rng :&mut ThreadRng) -> HeightRange{
+fn get_tunnel_height2(world_range : &HeightRange, segment_range: &HeightRange, height_bounds: &Bounds1D<f32>, distance: f32, rng :&mut ThreadRng) -> HeightRange{
     
     let radius = height_bounds.min;
 

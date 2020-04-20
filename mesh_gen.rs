@@ -1,12 +1,12 @@
 // mesh gen
 
-use std::f64::consts::{PI};
+use std::f64::consts::{PI, FRAC_PI_2};
 
 use nalgebra as nal;
 use nal::{Vector3, Rotation3};
 use rand::Rng;
 use rand::rngs::ThreadRng;
-use rand::seq::SliceRandom;
+
 use crate::unit::*;
 
 pub fn regular_polygon(dist : f32, nb_side: i32) -> Vec::<Position> {
@@ -20,7 +20,9 @@ pub fn regular_polygon(dist : f32, nb_side: i32) -> Vec::<Position> {
     result
 }
 
-pub fn irregular_polygon(dist_range: Bounds1D, nb_side: i32, rng : &mut ThreadRng) -> Vec::<Position> {
+pub fn irregular_polygon(dist_range: &Bounds1D<f32>, nb_side: i32, rng : &mut ThreadRng) -> Vec::<Position> {
+    // TODO : use irregular angles.
+    // see https://stackoverflow.com/questions/50405397/split-number-into-4-random-numbers
     let mut result = Vec::<Position>::new();    
     for i in 0..nb_side{
         let dist = rng.gen_range(dist_range.min, dist_range.max);
@@ -32,9 +34,39 @@ pub fn irregular_polygon(dist_range: Bounds1D, nb_side: i32, rng : &mut ThreadRn
     result
 }
 
+pub fn bump(normal : &Vector2, dist_range: &Bounds1D<f32>, nb_side : i32, rng : &mut ThreadRng) -> Vec::<Position> {
+    let mut result = Vec::<Position>::new();  
+
+    let start_angle = normal.x.acos() as f64 - FRAC_PI_2 ;
+    let step_angle = PI / nb_side as f64;
+    for i in 0..=nb_side{
+        let dist = rng.gen_range(dist_range.min, dist_range.max);
+        // let dist = dist_range.max;
+        let angle = (i as f64 * step_angle) + start_angle ;
+        let rot     = Rotation3::new(Vector3::new(0.0f64, 0.0, angle));
+        let tv = rot.transform_vector(&Vector3::new(dist as f64, 0.0, 0.0));
+        result.push(Position{x: tv.x as f32, y:tv.y as f32});
+    }
+    result.push(Position{x: 0.0f32, y:0.0f32});
+    result
+}
+
+pub fn bump2(normal : &Vector2, nb_side : i32, dist_range: &Bounds1D<f32>, rng : &mut ThreadRng) -> (Vec::<Position>, Vec<f32>) {
+    let mut result = Vec::<Position>::new();          
+    let mut xpos = Vec::<f32>::new();
+    for i in 0..=nb_side{
+        let dist = rng.gen_range(dist_range.min, dist_range.max);
+        let percent = i as f32 /  nb_side as f32;
+        let factor = 1.0 - ((percent - 0.5).abs() / 0.5);
+        let v = normal * dist * factor;
+        result.push(Position{x: v.x as f32, y:v.y as f32});
+        xpos.push(percent);
+    }    
+    (result, xpos)
+}
 
 
-pub fn crystal_polygon(dist_range: Bounds1D, nb_side: i32, rng : &mut ThreadRng) -> Vec::<Position> {
+pub fn crystal_polygon(dist_range: Bounds1D<f32>, nb_side: i32, rng : &mut ThreadRng) -> Vec::<Position> {
     let mut result = Vec::<Position>::new();    
 
     let start_angle = rng.gen_range(PI * 0.05, PI * 0.45);

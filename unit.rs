@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::ops::Sub;
+use std::marker::Copy;
 pub use nalgebra as na;
 
 pub type Position = mint::Point2::<f32>;
@@ -27,13 +29,20 @@ pub type KeyedResource<T> = HashMap<Id, T>;
 pub type KeyedGroup<T>    = HashMap<Id, Vec::<T>>;
 
 
-pub struct Bounds1D{
-    pub min: f32,
-    pub max: f32
+pub struct Bounds1D<T>{
+    pub min: T,
+    pub max: T
 }
 
-impl Bounds1D{
-    pub fn get_size(&self) -> f32 {
+impl<T: Sub<Output = T> + Copy> Bounds1D<T>{
+    pub fn new(min:T, max:T) -> Bounds1D<T>{
+        Bounds1D{
+            min: min,
+            max: max
+        }
+    }
+
+    pub fn get_size(&self) -> T {
         self.max - self.min
     } 
 }

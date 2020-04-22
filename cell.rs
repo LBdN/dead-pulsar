@@ -154,9 +154,20 @@ impl Cell {
 
     pub fn get_bottom_slice(&self, dist: f32) -> Cell{
         let [vy, vx1, vx2] = self.get_vectors();
+        let vyn = vy.normalize();
+        let vxn = vx1.normalize();
+        let cos_alpha = vxn.dot(&vyn);
+        let dist1 = dist / cos_alpha.acos().sin();
+        let x01 = Point2::from(self.x00) + vyn * dist1;        
+
         let vy2 = Point2::from(self.x11) - Point2::from(self.x10);
-        let x01 = Point2::from(self.x00) + vy.normalize() * dist;        
-        let x11 = Point2::from(self.x10) + vy2.normalize() * dist;        
+        let vy2n = vy2.normalize();
+        let cos_alpha = (-vxn).dot(&vy2n);
+        let dist2 = dist / cos_alpha.acos().sin();
+        let x11 = Point2::from(self.x10) + vy2n * dist2;        
+
+        // let x01 = Point2::from(self.x00) + vy.normalize() * dist;        
+        // let x11 = Point2::from(self.x10) + vy2.normalize() * dist;        
         Cell{
             x00 : self.x00.into(),
             x01 : x01.into(),

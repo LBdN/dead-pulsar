@@ -604,8 +604,8 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
 
             // decorations.
             let decoration_height = 10.0f32;
-            let side_bounds = Bounds1D::<i32>::new(3, 7);
-            let dist_bounds = Bounds1D::<f32>::new(3.0, 10.0);
+            let side_bounds = Bounds1D::<i32>::new(7, 30);
+            let dist_bounds = Bounds1D::<f32>::new(3.0, decoration_height);
             let eff_on_col = level.get_transition_effect("lose".to_string(), 0.0);
             if c.get_shrinked_y(decoration_height).can_contains(player_radius){
                 let c2       = c.get_bottom_slice(decoration_height);
@@ -618,6 +618,8 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
                 let (_, n) = c2.get_pos_and_normal(x,y);
                 // let pts = mesh_gen::bump(&n, &dist_bounds, nb_side, &mut rng );                
                 let (mut pts11, xpos) = mesh_gen::bump2(&n, nb_side, &dist_bounds, &mut rng );                
+                // let (mut pts11, xpos) = mesh_gen::bump3(nb_side, &dist_bounds, &mut rng );                
+                
                 //
                 for (p, x) in pts11.iter_mut().zip(xpos){
                     let pc = c2.get_relative_point(x, y);

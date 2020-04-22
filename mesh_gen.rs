@@ -65,6 +65,21 @@ pub fn bump2(normal : &Vector2, nb_side : i32, dist_range: &Bounds1D<f32>, rng :
     (result, xpos)
 }
 
+pub fn bump3(nb_side : i32, dist_range: &Bounds1D<f32>, rng : &mut ThreadRng) -> (Vec::<Position>, Vec<f32>) {
+    let normal = Vector2::new(0.0, 1.0);
+    let mut result = Vec::<Position>::new();          
+    let mut xpos = Vec::<f32>::new();
+    for i in 0..=nb_side{
+        let dist = rng.gen_range(dist_range.min, dist_range.max);
+        let percent = i as f32 /  nb_side as f32;
+        let factor = 1.0 - ((percent - 0.5).abs() / 0.5);
+        let v = normal * dist * factor;
+        result.push(Position{x: v.x as f32, y:v.y as f32});
+        xpos.push(percent);
+    }    
+    (result, xpos)
+}
+
 
 pub fn crystal_polygon(dist_range: Bounds1D<f32>, nb_side: i32, rng : &mut ThreadRng) -> Vec::<Position> {
     let mut result = Vec::<Position>::new();    

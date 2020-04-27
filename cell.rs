@@ -9,11 +9,7 @@ use crate::unit::*;
 
 
 
-fn get_point_in_cell(vx1: Vector2, vx2: Vector2, vy: Vector2, x :f32, y:f32) -> Position {
-    let vx = vx1 + (vx2-vx1)*y;
-    let pt = (vy * y) + (vx * x);
-    Position{x: pt.x, y: pt.y}
-}
+
 
 
 
@@ -34,10 +30,14 @@ fn minimum_distance(v : Point2, w : Point2, p : Point2) -> f32 {
 
   #[derive(Copy, Clone)]
  pub struct Cell{
-    pub x00 : Position,
-    pub x01 : Position,
-    pub x10 : Position,
-    pub x11 : Position,
+    pub x00 : Point2,
+    pub x01 : Point2,
+    pub x10 : Point2,
+    pub x11 : Point2,
+
+    pub vy : Vector2,
+    pub vx1 : Vector2,
+    pub vx2 : Vector2,    
 }
 
 pub fn create_cells(top_pts : &Vec<Position>, bot_pts : &Vec<Position>) -> Vec::<Cell> {
@@ -52,12 +52,13 @@ pub fn create_cells(top_pts : &Vec<Position>, bot_pts : &Vec<Position>) -> Vec::
             continue;
         }
 
-        let c = Cell{
-            x00 : last_bot.unwrap(),
-            x01 : last_top.unwrap(),
-            x10 : bottom.clone(),
-            x11 : top.clone(),
-        };
+
+        let x00 = last_bot.unwrap();
+        let x01 = last_top.unwrap();
+        let x10 = bottom.clone();
+        let x11 = top.clone();
+
+        let c = Cell::new_from_pos(&x00, &x01, &x11, &x10);
 
         panic!(c.is_valid());
         
@@ -71,24 +72,35 @@ pub fn create_cells(top_pts : &Vec<Position>, bot_pts : &Vec<Position>) -> Vec::
 }
 
 impl Cell {
-    fn get_vectors(&self) -> [Vector2; 3] {
-        let mut result : [Vector2; 3] = [Vector2::identity(); 3];
 
-        let ox = Point2::from(self.x00);
-        let oy = Point2::from(self.x01);
-        result[0] = oy - ox ;
-        let ox = Point2::from(self.x00);
-        let oy = Point2::from(self.x10);
-        result[1] =  oy - ox;
-        let ox = Point2::from(self.x01);
-        let oy = Point2::from(self.x11);
-        result[2] = oy - ox;
+    pub fn new_from_pos(bl: &Position, tl: &Position, tr : &Position, br: &Position) -> Cell {
+        let x00 = Point2::from(bl.clone());
+        let x01 = Point2::from(tl.clone());
+        let x11 = Point2::from(tr.clone());
+        let x10 = Point2::from(br.clone());
+        Cell::new(&x00, &x01, &x11, &x10)
+    }
 
-        result
+    pub fn new(x00: &Point2, x01: &Point2, x11 : &Point2, x10: &Point2) -> Cell{
+        
+        let vy  = x01 - x00;
+        let vx1 = x10 - x00;
+        let vx2 = x11 - x01;
+
+        let c = Cell{
+            x00 : x00.clone(),        
+            x01 : x01.clone(),
+            x10 : x10.clone(),
+            x11 : x11.clone(),
+            vy  : x01 - x00,
+            vx1 : x10 - x00,
+            vx2 : x11 - x01,
+        };
+        c
     }
 
     pub fn get_points(&self) -> Vec::<Position> {
-        let mut v =vec! [ self.x00, self.x01, self.x11, self.x10];
+        let mut v : Vec::<Position> =vec! [ self.x00.into(), self.x01.into(), self.x11.into(), self.x10.into()];
         v.reverse();
         v
     }
@@ -97,83 +109,86 @@ impl Cell {
         self.get_point(0.5f32, 0.5f32)
     }
 
-    pub fn get_point(&self, x :f32, y:f32) -> Position {
-        let [vy, vx1, vx2] = self.get_vectors();
-        let mut p = get_point_in_cell(vx1, vx2, vy, x, y);
-        p.x += self.x00.x;
-        p.y += self.x00.y;
-        p
+    pub fn get_point(&self, x :f32, y:f32) -> Position {        
+        let vx : Vector2 = self.vx1 + ((self.vx2-self.vx1)*y);
+        let pt : Point2  = self.x00 + ((self.vy * y) + (vx * x));        
+        pt.into()
     }
 
     pub fn get_relative_point(&self, x :f32, y:f32) -> Position {
-        let [vy, vx1, vx2] = self.get_vectors();
-        let mut p = get_point_in_cell(vx1, vx2, vy, x, y);        
-        p
+        let vx : Vector2 = self.vx1 + ((self.vx2-self.vx1)*y);
+        let pt : Point2  = ((self.vy * y) + (vx * x)).into();        
+        pt.into()
     }
 
     pub fn get_pos_and_normal(&self, x: f32, y: f32) -> (Position, Vector2) {
-        let p = self.get_point(x, y);
+        let p  = self.get_point(x, y);
         let p2 = self.get_point(1.0, y);
         let v = Point2::from(p2) - Point2::from(p);
         let v2 = Vector2::new(-v.y,  v.x);
         (p, v2.normalize())
     }
 
-    pub fn get_shrinked(&self, dist: f32) -> Cell {
-        let [vy, vx1, vx2] = self.get_vectors();
-        let x00 = on_bisector_at(&self.x00, &vy, &vx1, dist);
-        let x01 = on_bisector_at(&self.x01, &-vy, &vx2, dist);
-
-        let o11 = Point2::from(self.x11);
-        let o10 = Point2::from(self.x10);
-        let vy = o11 - o10;        
-        let x11 = on_bisector_at(&self.x11, &-vy, &-vx2, dist);        
-        let x10 = on_bisector_at(&self.x10, &vy, &-vx1, dist);
-        Cell{
-            x00 : x00.into(),
-            x01 : x01.into(),
-            x10 : x10.into(),
-            x11 : x11.into(),
-        }
+    pub fn get_normal_bottom(&self) -> Vector2 {
+        Vector2::new(-self.vx1.y,  self.vx1.x).normalize()
     }
 
-    pub fn get_shrinked_y(&self, dist: f32) -> Cell{
-        let [vy, vx1, vx2] = self.get_vectors();
-        let vy2 = Point2::from(self.x11) - Point2::from(self.x10);
-        let x00 = Point2::from(self.x00) + vy.normalize() * dist;
-        let x01 = Point2::from(self.x01) + vy.normalize() * -dist;
-        let x10 = Point2::from(self.x10) + vy2.normalize() * dist;
-        let x11 = Point2::from(self.x11) + vy2.normalize() * -dist;
-        Cell{
-            x00 : x00.into(),
-            x01 : x01.into(),
-            x10 : x10.into(),
-            x11 : x11.into(),
-        }
+    pub fn get_normal_top(&self) -> Vector2 {
+        (Vector2::new(-self.vx2.y,  self.vx2.x)* -1.0).normalize() 
     }
 
-    pub fn get_bottom_slice(&self, dist: f32) -> Cell{
-        let [vy, vx1, vx2] = self.get_vectors();
-        let vyn = vy.normalize();
-        let vxn = vx1.normalize();
+    pub fn get_shrinked(&self, dist: f32) -> Cell {        
+        let x00 = on_bisector_at(&self.x00, &self.vy, &self.vx1, dist);
+        let x01 = on_bisector_at(&self.x01, &-self.vy, &self.vx2, dist);
+        
+        let vy = self.x11 - self.x10;        
+        let x11 = on_bisector_at(&self.x11, &-vy, &-self.vx2, dist);        
+        let x10 = on_bisector_at(&self.x10, &vy, &-self.vx1, dist);
+        Cell::new(&x00, &x01, &x11, &x10)
+    }
+
+    pub fn get_shrinked_y(&self, dist: f32) -> Cell{        
+        let vy2 = self.x11- self.x10;
+        let x00 = self.x00 + self.vy.normalize() * dist;
+        let x01 = self.x01 + self.vy.normalize() * -dist;
+        let x10 = self.x10 + vy2.normalize() * dist;
+        let x11 = self.x11 + vy2.normalize() * -dist;
+        Cell::new( &x00, &x01, &x11, &x10)
+    }
+
+    pub fn get_bottom_slice(&self, dist: f32) -> Cell{        
+        let vyn = self.vy.normalize();
+        let vxn = self.vx1.normalize();
         let cos_alpha = vxn.dot(&vyn);
         let dist1 = dist / cos_alpha.acos().sin();
-        let x01 = Point2::from(self.x00) + vyn * dist1;        
+        let x01 = self.x00 + vyn * dist1;        
 
-        let vy2 = Point2::from(self.x11) - Point2::from(self.x10);
+        let vy2 = self.x11 - self.x10;
         let vy2n = vy2.normalize();
         let cos_alpha = (-vxn).dot(&vy2n);
         let dist2 = dist / cos_alpha.acos().sin();
         let x11 = Point2::from(self.x10) + vy2n * dist2;        
+        
+        Cell::new( &self.x00, &x01, &x11, &self.x10)
+    }
 
-        // let x01 = Point2::from(self.x00) + vy.normalize() * dist;        
-        // let x11 = Point2::from(self.x10) + vy2.normalize() * dist;        
-        Cell{
-            x00 : self.x00.into(),
-            x01 : x01.into(),
-            x10 : self.x10.into(),
-            x11 : x11.into(),
-        }
+    pub fn get_top_slice(&self, dist: f32) -> Cell{        
+        let vyn = self.vy.normalize() * -1.0; 
+        let vxn = self.vx2.normalize();   
+        // if vyn.cross(&vxn) > 1{
+
+        // }
+        let cos_alpha = vxn.dot(&vyn);
+        let dist1 = dist / cos_alpha.acos().sin();
+        let x00 = self.x01 + vyn * dist1;        
+
+        let vy2 = self.x11 - self.x10;
+        let vy2n = vy2.normalize() * -1.0;
+        let cos_alpha = (-vxn).dot(&vy2n);
+        let dist2 = dist / cos_alpha.acos().sin();
+        let x10 = self.x11 + vy2n * dist2;        
+        
+        Cell::new( &x00, &self.x01, &self.x11, &x10)
     }
 
     pub fn split(&self, number: i32) -> Vec::<Cell> {
@@ -195,12 +210,12 @@ impl Cell {
             let row = i / number;
             let bottom_left : usize = (row*col_number + col) as usize;
             let top_left : usize    = ((row+1)*col_number + col) as usize;
-            let c = Cell{
-                x00 : positions[bottom_left].clone(),
-                x01 : positions[top_left].clone(),
-                x10 : positions[bottom_left+1].clone(),
-                x11 : positions[top_left+1].clone(),
-            };
+            let c = Cell::new_from_pos(
+                 &positions[bottom_left].clone(),
+                 &positions[top_left].clone(),
+                 &positions[top_left+1].clone(),
+                 &positions[bottom_left+1].clone(),                 
+            );
             result.push(c);
         }
         result
@@ -225,12 +240,12 @@ impl Cell {
             let row = i / number_col;
             let bottom_left : usize = (row*col_number + col) as usize;
             let top_left : usize    = ((row+1)*col_number + col) as usize;
-            let c = Cell{
-                x00 : positions[bottom_left].clone(),
-                x01 : positions[top_left].clone(),
-                x10 : positions[bottom_left+1].clone(),
-                x11 : positions[top_left+1].clone(),
-            };
+            let c = Cell::new_from_pos(
+                &positions[bottom_left].clone(),
+                &positions[top_left].clone(),
+                &positions[top_left+1].clone(),
+                &positions[bottom_left+1].clone(),                 
+           );
             result.push(c);
         }
         result
@@ -258,12 +273,12 @@ impl Cell {
     }
 }
 
-fn on_bisector_at(p: &Position, vy : &Vector2, vx: &Vector2, dist: f32) -> Point2{    
+fn on_bisector_at(p: &Point2, vy : &Vector2, vx: &Vector2, dist: f32) -> Point2{    
     let alpha = vy.angle(&vx);
     let angle = alpha / 2.0;
     let length = dist / angle.sin();
-    let v = ((vy.norm() * vx) + (vx.norm()* vy)).normalize() * length;
-    Point2::from(p.clone()) + v
+    let v : Vector2 = ((vy.norm() * vx) + (vx.norm()* vy)).normalize() * length;
+    p + v
 }
 
 

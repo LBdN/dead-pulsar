@@ -281,8 +281,11 @@ impl EventHandler for App {
         }
     }
 
-    fn gamepad_button_up_event(&mut self, _ctx: &mut Context, _btn: Button, _id: GamepadId) {
+    fn gamepad_button_up_event(&mut self, _ctx: &mut Context, _btn: Button, _id: GamepadId) {        
         if let Some(state) = self.state.as_mut(){            
+            // if _btn == Button::LeftTrigger {
+            //     p.input.lastButtonUp = Btn;
+            // }
             state.paused = !state.paused
         }
     }

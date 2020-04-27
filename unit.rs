@@ -7,8 +7,18 @@ pub type Position = mint::Point2::<f32>;
 pub type Size     = mint::Point2::<f32>;
 pub type Id       = uuid::Uuid;
 
+pub static Origin : Position = Position{x:0.0, y:0.0};
+
 pub type Vector2 = na::Vector2::<f32>;
 pub type Point2  = na::Point2::<f32>;
+
+pub fn vec_to_pos(v : &Vector2) -> Position{
+    Position{ x: v.x, y:v.y}
+}
+
+pub fn pt_to_pos(v : &Point2) -> Position{
+    Position{ x: v.x, y:v.y}
+}
 
 pub fn get_id() -> uuid::Uuid {
     uuid::Uuid::new_v4()

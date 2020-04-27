@@ -329,12 +329,12 @@ pub fn convert_to_cells(height_ranges: &Vec::<HeightRange>, xpositions: &Vec<f32
     for item in height_ranges_pairs.zip(xpositions_pairs){
         if let &[last_hr, cur_hr] = item.0 {
             if let &[last_x, cur_x] = item.1 {                
-                let c = Cell{
-                    x00 : Position{x: last_x, y: last_hr.bottom},
-                    x01 : Position{x: last_x, y: last_hr.top},
-                    x10 : Position{x: cur_x, y: cur_hr.bottom},
-                    x11 : Position{x: cur_x, y: cur_hr.top}
-                };
+                let c = Cell::new_from_pos(
+                    &Position{x: last_x, y: last_hr.bottom},
+                    &Position{x: last_x, y: last_hr.top},                    
+                    &Position{x: cur_x, y: cur_hr.top},
+                    &Position{x: cur_x, y: cur_hr.bottom},
+                );
                 // panic!(c.is_valid());
                 result.push(c);
             }

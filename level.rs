@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::mem;
 use ggez::{Context};
 use ggez::graphics::{Color};
 use rand::Rng;
@@ -200,12 +201,16 @@ impl World{
 
 
 struct WorldBuilder{
-    w : World
+    w : World,
+    debug_mb : render::MeshBuilderOps
 }
 
 impl WorldBuilder{
     fn new(name : String) -> WorldBuilder{
-        WorldBuilder { w : World::new(name)}
+        WorldBuilder {
+            w : World::new(name),
+            debug_mb : render::MeshBuilderOps::new()
+        }
     }
 
     fn set_size(&mut self, size : Size){
@@ -325,28 +330,76 @@ impl WorldBuilder{
         res
     }
 
-    pub fn add_debug_actor(&mut self,  mb : render::MeshBuilderOps, systems: &mut Systems, ctx: &mut Context) -> Id{
-        let mut a = actors::ActorType::Background.make();
-        let drawable = mb.build(&mut systems.renderer, ctx);
-        a.drawable = drawable;
-        a.visible = true;
-        a.ticking = false;
-        self.add_to_world(a)
-    }
+    // BackgroundPts
 
-    fn build(self) -> World{
-        self.w
-    }
+    // pub fn add_background_actor(&self, pts , pos: Position, effect_on_col) -> Id{
+    //     let mut a = actors::ActorType::Background.make();
+    //     a.drawable = systems.renderer.add_dynamic_poly(&pts11.clone(), color::BLACK);
+    //     a.collision = actors::mk_polycol(&pts);
+    //     a.on_collision.push( eff_on_col );
+    //     a.transform = c2.get_point(0.0, 0.0);
+    //     wb.debug_pos(&a.transform);
+    //     wb.add_to_world(a);
+    // }
 
-    pub fn debug_pos(&self, mut debug_mb : render::MeshBuilderOps, pos : &Position) -> render::MeshBuilderOps {
+
+    // DEBUG
+
+
+    pub fn debug_pos(&mut self, pos : &Position) {
         let mut dbg_pts = mesh_gen::regular_polygon(1.0, 4);
         for pt in &mut dbg_pts{
             pt.x += pos.x;
             pt.y += pos.y;
         }
-        debug_mb.polyline(&dbg_pts, 2.0, color::RED)        
+        self.debug_mb.polygon_ref(&dbg_pts, color::RED);
     }
-    
+
+    pub fn debug_polyline(&mut self, pts : &Vec::<Position>, origin: &Position) {
+        let mut dbg_pts =  pts.clone();
+        for pt in &mut dbg_pts{
+            pt.x += origin.x;
+            pt.y += origin.y;
+        }
+        self.debug_mb.polyline_ref(&dbg_pts,1.0f32, color::RED);
+    }
+
+    pub fn debug_ray(&mut self, origin: &Point2, vector: &Vector2){
+        let p : Position = (*origin).into();
+        self.debug_pos(&p);
+        // let end_point =  origin+vector;
+        let normal = Vector2::new( -vector.y, vector.x).normalize();
+        let mut pts = Vec::<Position>::new();
+        pts.push(Origin);
+        pts.push(vec_to_pos(&normal));
+        pts.push(vec_to_pos(&-normal));
+        pts.push(vec_to_pos(&vector));
+        // let pts = vec![origin, &(origin+normal), &end_point, &(origin-normal)];
+        // let pts2 : Vec::<Position> =pts.iter().map(|v| {*v.into()});
+        self.debug_polyline(&pts, &pt_to_pos(&origin));        
+    }
+
+    pub fn add_debug_actor(&mut self, systems: &mut Systems, ctx: &mut Context) -> Id{
+        if !self.debug_mb.empty {
+            let mut a = actors::ActorType::Background.make();
+            let debug_mb = mem::replace(&mut self.debug_mb, render::MeshBuilderOps::new());
+            let drawable = debug_mb.build(&mut systems.renderer, ctx);
+            a.drawable = drawable;
+            a.visible = true;
+            a.ticking = false;
+            self.add_to_world(a)
+        } else {
+            no_id()
+        }
+    }
+
+    // BUILD
+
+    fn build(mut self, systems: &mut Systems, ctx: &mut Context) -> World{
+        self.add_debug_actor(systems, ctx);
+        self.w
+    }
+
 }
 
 type LevelLoader = fn(&Level, &mut GameState, &mut Systems, &mut Context) -> World;
@@ -385,12 +438,12 @@ impl Level{
 
 }
 
-fn emptyload(level : &Level, state: &mut GameState, _systems: &mut Systems, _ctx: &mut Context) -> World {
+fn emptyload(level : &Level, state: &mut GameState, systems: &mut Systems, ctx: &mut Context) -> World {
     let wb = WorldBuilder::new(level.name.clone());
-    wb.build()
+    wb.build(systems, ctx)
 }
 
-pub fn introload(level : &Level, state: &mut GameState, _systems: &mut Systems, _ctx: &mut Context) -> World {
+pub fn introload(level : &Level, state: &mut GameState, systems: &mut Systems, ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
 
     let center = Position{x: state.screen.x /2.0, y: state.screen.y /2.0 };
@@ -403,10 +456,10 @@ pub fn introload(level : &Level, state: &mut GameState, _systems: &mut Systems, 
     });
 
     wb.add_default_camera();
-    wb.build()
+    wb.build(systems, ctx)
 }
 
-pub fn tutoload(level : &Level, state: &mut GameState, _systems: &mut Systems, _ctx: &mut Context) -> World {
+pub fn tutoload(level : &Level, state: &mut GameState, systems: &mut Systems, ctx: &mut Context) -> World {
     let mut wb = WorldBuilder::new(level.name.clone());
 
     let y_step = state.screen.y /5.0;
@@ -429,10 +482,10 @@ pub fn tutoload(level : &Level, state: &mut GameState, _systems: &mut Systems, _
     wb.get_mut_actor(&id).unwrap().transform = center;
 
     wb.add_default_camera();
-    wb.build()
+    wb.build(systems, ctx)
 }
 
-pub fn gameoverload(level : &Level, state: &mut GameState, _systems: &mut Systems, _ctx: &mut Context) -> World {
+pub fn gameoverload(level : &Level, state: &mut GameState, systems: &mut Systems, ctx: &mut Context) -> World {
     state.level =0;
     state.score =0;
 
@@ -445,10 +498,10 @@ pub fn gameoverload(level : &Level, state: &mut GameState, _systems: &mut System
     wb.get_mut_actor(&id).unwrap().transform = center;
 
     wb.add_default_camera();
-    wb.build()
+    wb.build(systems, ctx)
 }
 
-pub fn victoryload(level : &Level, state: &mut GameState, _systems: &mut Systems, _ctx: &mut Context) -> World {
+pub fn victoryload(level : &Level, state: &mut GameState, systems: &mut Systems, ctx: &mut Context) -> World {
     state.level +=1;
 
     let mut wb = WorldBuilder::new(level.name.clone());
@@ -460,7 +513,7 @@ pub fn victoryload(level : &Level, state: &mut GameState, _systems: &mut Systems
     wb.get_mut_actor(&id).unwrap().transform = center;
 
     wb.add_default_camera();
-    wb.build()
+    wb.build(systems, ctx)
 }
 
 pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ctx: &mut Context) -> World {
@@ -602,45 +655,60 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
 
             let dist    = rng.gen_range(min_size, max_size) as f32;
 
-            // decorations.
+            // DECORATIONS.
             let decoration_height = 10.0f32;
             let side_bounds = Bounds1D::<i32>::new(7, 30);
             let dist_bounds = Bounds1D::<f32>::new(3.0, decoration_height);
             let eff_on_col = level.get_transition_effect("lose".to_string(), 0.0);
             if c.get_shrinked_y(decoration_height).can_contains(player_radius){
-                let c2       = c.get_bottom_slice(decoration_height);
 
+                // BOTTOM SLICE
+                let bottom_slice       = c.get_bottom_slice(decoration_height);
 
-                // debug_mb = debug_mb.polyline(&c2.get_points(), 1.0f32, color::GREY);
-                let x   = rng.gen_range(0.0f32, 1.0f32);
-                let y   = 0.0f32;
+                let n = bottom_slice.get_normal_bottom();
+                // wb.debug_ray(&bottom_slice.x00, &(n*30.0));
                 let nb_side  = rng.gen_range(side_bounds.min, side_bounds.max);
-                let (_, n) = c2.get_pos_and_normal(x,y);
-                // let pts = mesh_gen::bump(&n, &dist_bounds, nb_side, &mut rng );                
-                let (mut pts11, xpos) = mesh_gen::bump2(&n, nb_side, &dist_bounds, &mut rng );                
-                // let (mut pts11, xpos) = mesh_gen::bump3(nb_side, &dist_bounds, &mut rng );                
-                
-                //
+                let (mut pts11, xpos) = mesh_gen::bump2(&n, nb_side, &dist_bounds, &mut rng );
+                let y   = 0.0f32;
                 for (p, x) in pts11.iter_mut().zip(xpos){
-                    let pc = c2.get_relative_point(x, y);
+                    let pc = bottom_slice.get_relative_point(x, y);
                     p.x += pc.x;
                     p.y += pc.y;
                 }
+
                 let mut a = actors::ActorType::Background.make();
-                // DEBUG
-                // let mut dbg_pts =  pts11.clone();
-                // for pt in &mut dbg_pts{
-                //     pt.x += pos.x;
-                //     pt.y += pos.y;
-                // }
-                // debug_mb = debug_mb.polyline(&dbg_pts, 1.0f32, color::RED);
-                // END DEBUG
                 a.drawable = systems.renderer.add_dynamic_poly(&pts11.clone(), color::BLACK);
-                a.collision = actors::mk_polycol(&pts);                
+                a.collision = actors::mk_polycol(&pts11);
                 a.on_collision.push( eff_on_col );
-                a.transform = c2.get_point(0.0, 0.0);
-                // debug_mb = wb.debug_pos(debug_mb, &pos);
+                a.transform = bottom_slice.get_point(0.0, 0.0);
+                // wb.debug_pos(&a.transform);
                 wb.add_to_world(a);
+
+                // TOP SLICE
+                let top_slice = c.get_top_slice(decoration_height);
+                // wb.debug_polyline(&top_slice.get_points(), &Origin);
+
+                let n = top_slice.get_normal_top();
+                // wb.debug_ray(&top_slice.x01, &(n*30.0));
+                let nb_side  = rng.gen_range(side_bounds.min, side_bounds.max);
+                let (mut pts11, xpos) = mesh_gen::bump2(&n, nb_side, &dist_bounds, &mut rng );
+                let y   = 1.0f32;
+                for (p, x) in pts11.iter_mut().zip(xpos){
+                    let pc = top_slice.get_relative_point(x, y);
+                    p.x += pc.x;
+                    p.y += pc.y;
+                }
+
+                let mut a = actors::ActorType::Background.make();
+                a.drawable = systems.renderer.add_dynamic_poly(&pts11.clone(), color::BLACK);
+                a.collision = actors::mk_polycol(&pts11);
+                a.on_collision.push( eff_on_col );
+                a.transform = top_slice.get_point(0.0, 0.0);
+                // wb.debug_pos(&a.transform);
+                wb.add_to_world(a);
+
+
+
                 *c = c.get_shrinked_y(decoration_height)
             } // else { c };
 
@@ -778,6 +846,5 @@ pub fn playload(level : &Level, state: &mut GameState, systems: &mut Systems, ct
         wb.add_effect_to_actor(&text_id, effect::Effect::UpdateScore{actor_id:text_id}, false);
     }
 
-    wb.add_debug_actor(debug_mb , systems, ctx);
-    wb.build()
+    wb.build(systems, ctx)
 }

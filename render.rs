@@ -102,12 +102,14 @@ impl Renderer{
 }
 
 pub struct MeshBuilderOps{
+    pub empty : bool,
     mb : graphics::MeshBuilder,
 }
 
 impl MeshBuilderOps{
     pub fn new() -> MeshBuilderOps{
         MeshBuilderOps{
+            empty : true,
             mb: graphics::MeshBuilder::new()
         }
     }
@@ -115,11 +117,25 @@ impl MeshBuilderOps{
     pub fn polygon(mut self, pts : &Vec::<Position>, color: Color) -> MeshBuilderOps{
         // DrawMode::Stroke(StrokeOptions::default())
         let _ = self.mb.polygon(DrawMode::fill(), &pts, color);
+        self.empty = false;
         self
     }
 
-    pub fn polyline(mut self, pts : &Vec::<Position>,width: f32, color: Color) -> MeshBuilderOps{
+    pub fn polygon_ref(&mut self, pts : &Vec::<Position>, color: Color) -> &mut MeshBuilderOps{
+        // DrawMode::Stroke(StrokeOptions::default())
+        let _ = self.mb.polygon(DrawMode::fill(), &pts, color);
+        self.empty = false;
+        self
+    }        
+
+    pub fn polyline(mut self, pts : &Vec::<Position>, width: f32, color: Color) -> MeshBuilderOps{
         let _ = self.mb.polygon(DrawMode::stroke(width), &pts, color);
+        self
+    }
+
+    pub fn polyline_ref(&mut self, pts : &Vec::<Position>, width: f32, color: Color) -> &mut MeshBuilderOps{
+        let _ = self.mb.polygon(DrawMode::stroke(width), &pts, color);
+        self.empty = false;
         self
     }
 
@@ -127,8 +143,9 @@ impl MeshBuilderOps{
         let _ = self.mb.rectangle(
             DrawMode::fill(),
             Rect {x:pos.x, y:pos.y, w:size.x, h:size.y},
-            color1
+            color1            
         );
+        self.empty = false;
         self
     }
 

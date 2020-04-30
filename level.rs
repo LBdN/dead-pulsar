@@ -710,7 +710,9 @@ pub fn playload(
         let mut a = actors::ActorType::Player.make();
         a.collision = actors::mk_polycol(&ship_pts);
         let mut mm = render::MeshModel::new();
+        mm.add_poly(&mesh_gen::cockpit_ship(ship_size), &color::SKYBLUE);
         mm.add_poly(&ship_pts, &color::GREY);
+        
         a.add_drawable(systems.renderer_source.add_mesh_model(mm));
         let player_actor_id = wb.add_to_world(a);
         wb.w.player_atr_id = player_actor_id.clone();

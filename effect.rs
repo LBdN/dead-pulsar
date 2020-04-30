@@ -36,7 +36,7 @@ impl Effect{
         }        
     } 
 
-    pub fn on_actor(&mut self, _actor : &mut actors::Actor, _ctx: &Context, state : &GameState, worldbounds : &level::WorldBounds, systems : &mut Systems) -> Option::<level::WorldChange>{        
+    pub fn on_actor(&mut self, actor : &mut actors::Actor, _ctx: &Context, state : &GameState, worldbounds : &level::WorldBounds, systems : &mut Systems) -> Option::<level::WorldChange>{        
         match self {
             Effect::AutoNextScene{duration, cur_scene_idx, next_scene_idx} => {
                 *duration -= timer::delta(_ctx).as_secs_f32();
@@ -51,18 +51,23 @@ impl Effect{
                 None                
             },
             Effect::KillActor{actor_id} => {                
-                if let render::Renderable::DynamicRect{ref mut color, ..} = _actor.drawable {
-                    *color = color::GREEN;
-                }      
-                if let render::Renderable::DynamicPoly{poly_idx, mesh_oidx, ref mut dirty} = _actor.drawable {
-                    systems.renderer.polygons.get_mut(poly_idx).map(|poly| {
-                        poly.color = color::GREEN;
-                        poly
-                    });
-                    *dirty = true;
-                }                 
-                _actor.ticking = false;       
-                _actor.collision = actors::mk_nocol();         
+                // if let render::Renderable::DynamicRect{ref mut color, ..} = _actor.drawable {
+                //     *color = color::GREEN;
+                // }      
+                let id = actor.get_drawable();
+                if let Some(mm) = systems.renderer_source.meshmodels.get_mut(&id){
+                    mm.polygons.get_mut(0).map( |p|{p.color = color::GREEN} );
+                }
+
+                // if let render::Renderable::DynamicPoly{poly_idx, mesh_oidx, ref mut dirty} = actor.get_drawable() {
+                //     systems.renderer.polygons.get_mut(*poly_idx).map(|poly| {
+                //         poly.color = color::GREEN;
+                //         poly
+                //     });
+                //     *dirty = true;
+                // }                 
+                actor.ticking = false;       
+                actor.collision = actors::mk_nocol();         
                 Some(level::WorldChange {
                     score: 1,
                     level: None,
@@ -70,22 +75,28 @@ impl Effect{
                 })
             },
             Effect::ProcessInput => {         
-                player_handle_input(&state.input, _actor, &worldbounds, timer::delta(_ctx).as_millis());
+                player_handle_input(&state.input, actor, &worldbounds, timer::delta(_ctx).as_millis());
                 None
             },
             Effect::MoveActor{actor_id, vector} => {                
-                _actor.transform.x += vector.x;
-                _actor.transform.y += vector.y;                                    
+                actor.transform.x += vector.x;
+                actor.transform.y += vector.y;                                    
                 None
             },
             Effect::PlaceActor{actor_id, position} => {                
-                _actor.transform = *position;
+                actor.transform = *position;
                 None
             },
-            Effect::UpdateScore{actor_id} => {                                    
-                if let render::Renderable::DynamicTextDraw{string, ..} = &mut _actor.drawable{
-                    *string = format!( "Score: {}", state.score);
+            Effect::UpdateScore{actor_id} => {                
+                
+                let id = actor.get_drawable();
+                if let Some(tm) = systems.renderer_source.textmodels.get_mut(&id){
+                    tm.update_string(format!( "Score: {}", state.score));
                 }
+
+                // if let render::Renderable::DynamicTextDraw{string, ..} = &mut actor.get_drawable(){
+                //     *string = format!( "Score: {}", state.score);
+                // }
                 None
             },
             Effect::PlaySound(sound_index) => {

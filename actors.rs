@@ -2,6 +2,7 @@ use cgmath::{Point2 as CPoint};
 use crate::effect::{Effect};
 use crate::render;
 use crate::unit;
+use crate::unit::*;
 
 
 // use num_traits as num;
@@ -138,11 +139,11 @@ impl ActorType{
 
 pub struct Actor {
     pub atype      : ActorType,
-    pub id         : unit::Id,
+    pub id         : Id,
     //==
     pub transform  : unit::Position,    
     //==
-    pub drawable   : render::Renderable,
+    drawable   : Id,
     pub drawctx    : DrawContext,
     pub visible    : bool,
     //==
@@ -150,7 +151,7 @@ pub struct Actor {
     pub on_collision : Vec::<Effect>,
     //==
     pub on_start : Vec::<Effect>,
-    pub effects  : Vec::<Effect>,
+    pub on_tick  : Vec::<Effect>,
     pub ticking  : bool,    
     //==
     
@@ -166,7 +167,7 @@ impl Actor {
             //==
             transform: unit::Position{ x:0.0, y:0.0},
             //==
-            drawable : render::Renderable::NoDraw,
+            drawable : no_id(),
             drawctx  : DrawContext::WorldSpace,
             visible  : false,
             //==
@@ -174,9 +175,18 @@ impl Actor {
             on_collision : Vec::<Effect>::new(),
             //==
             on_start  : Vec::<Effect>::new(),
-            effects   : Vec::<Effect>::new(),
+            on_tick   : Vec::<Effect>::new(),
             ticking   : false
         }
+    }
+
+
+    pub fn add_drawable(&mut self, drawable : Id){
+        self.drawable = drawable
+    }
+
+    pub fn get_drawable(&self) -> Id{
+        self.drawable.clone()
     }
 
     pub fn start(&mut self){      

@@ -148,5 +148,11 @@ pub fn base_ship(dist: f32) -> Vec::<Position> {
     result
 }
 
-
+pub fn cockpit_ship(dist: f32) -> Vec::<Position> {
+    let mut result = Vec::<Position>::new();
+    result.push( Position{x:  3.0f32 * dist, y: 0.0f32 * dist});
+    result.push( Position{x:  1.0f32 * dist, y: 1.0f32 * dist});
+    result.push( Position{x: -1.0f32 * dist, y: 1.0f32 * dist});    
+    result
+}
 

@@ -62,12 +62,21 @@ pub struct GameState{
 }
 
 pub struct Systems{
+    pub renderer_source : render::RendererSource,
     pub renderer    : render::Renderer,
     pub sounds      : Vec::<audio::Source>,
     pub sound_names : HashMap::<String, usize>
 }
 
 impl Systems{
+    pub fn new() -> Self{
+        Systems{
+            renderer_source : render::RendererSource::new(),
+            renderer    : render::Renderer::new(),
+            sounds      : Vec::<audio::Source>::new(),
+            sound_names : HashMap::<String, usize>::new()
+        }
+    }
     fn add_sound(&mut self, rel_path : String,  ctx : &mut Context) {        
         let sound = audio::Source::new(ctx, rel_path.clone()).unwrap();
         self.sounds.push(sound);
@@ -98,11 +107,7 @@ impl App {
         fonts.insert("V5PRD___".to_string(), graphics::Font::new(ctx, "/font/V5PRD___.TTF").unwrap());        
 
         let mut a = App {
-            systems : Systems{
-                renderer    : render::Renderer::new(),
-                sounds      : Vec::<audio::Source>::new(),
-                sound_names : HashMap::<String, usize>::new()
-            },            
+            systems :Systems::new(),            
             state : Some( GameState{
                 score : 0,
                 input : InputState:: default(),
@@ -181,8 +186,7 @@ impl EventHandler for App {
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
 
 
-        let t = self.world.get_camera_actor().transform;
-        // let t = self.actors[&self.camera.actor_id].transform;
+        let t = self.world.get_camera_actor().transform;        
         self.systems.renderer.start_frame(ctx, t);
             
         self.systems.renderer.start_batch();
@@ -191,8 +195,7 @@ impl EventHandler for App {
         let mut smtg_drawn = false;
         let mut draw_ctx = actors::DrawContext::WorldSpace;        
         self.systems.renderer.push_cam_transform(ctx);
-
-        // for a in self.actors.values() {
+        
         for a in &mut self.world.actors {
             if !a.visible {
                 continue;
@@ -210,11 +213,8 @@ impl EventHandler for App {
                 }
                 draw_ctx = a.drawctx;
             }
-            a.drawable.draw(a.transform, &mut self.systems.renderer, ctx);
-            if let render::Renderable::DynamicRect{color:_, size:_} = a.drawable{
-                smtg_drawn = true;
-            }
-            
+            let id = a.get_drawable();
+            self.systems.renderer_source.draw(id, a.transform, ctx, &mut self.systems.renderer);            
         }    
         if smtg_drawn == true{
             self.systems.renderer.push_cam_transform(ctx);            
@@ -241,7 +241,9 @@ impl EventHandler for App {
                 }
                 draw_ctx = a.drawctx;
             }
-            a.drawable.draw(a.transform, &mut self.systems.renderer, ctx);                        
+            let id = a.get_drawable();
+            self.systems.renderer_source.draw(id, a.transform, ctx, &mut self.systems.renderer);            
+            // a.get_drawable().draw(a.transform, &mut self.systems.renderer, ctx);                        
         }    
 
         self.systems.renderer.end_frame(ctx)
@@ -263,6 +265,20 @@ impl EventHandler for App {
                         .expect("Could not save screenshot");
                 }
                 KeyCode::Escape => event::quit(ctx),
+                _ => (), // Do nothing
+            }
+        }
+    }
+
+    fn key_up_event(&mut self, _ctx: &mut Context, keycode: KeyCode, _keymod: KeyMods) {
+        if let Some(p) = self.state.as_mut(){
+
+            match keycode {
+                KeyCode::Up    => { p.input.yaxis = 0.0;  }
+                KeyCode::Down  => { p.input.yaxis = 0.0; }
+                KeyCode::Left  => { p.input.xaxis = 0.0; }
+                KeyCode::Right => { p.input.xaxis = 0.0;  }
+                KeyCode::Space => { p.input.fire  = false; }                
                 _ => (), // Do nothing
             }
         }
